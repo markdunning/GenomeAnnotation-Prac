@@ -166,10 +166,10 @@ gcFunction(myseqs)
 
 @
 
-\section{Alternative Feature Counting}
+
 In the analysis of the pasilla dataset, we allocated reads to genes. However, in this section we will explore the ways of counting reads that align to other genomic regions of interest. In this case we will use exons. An example bam file is provided in the \Biocexptpkg{pasillaBamSubset} package, but only reads on chromosome 4 are provided.
 
-\subsection{Transcript Annotation}
+\subsection{Organism Annotation}
 In order to use the example bam file, which is chromosome 4 only, we will have to get the IDs of genes that occur on chromosome 4. We illustrate this using the \Biocannopkg{org.Dm.eg.db} package.
 
 \usecase
@@ -184,6 +184,8 @@ chr4Genes <- select(dm, cols = "ENSEMBL", keytype = "CHR", keys = "4")
 head(chr4Genes)
 chr4ID <- chr4Genes[, 2]
 @
+
+\subsection{Transcript packages}
 
 Bioconductor provide a number of pre-built packages that have a database of all transcript information for a particular organism. The package we are going to use is \Biocannopkg{TxDb.Dmelanogaster.UCSC.dm3.ensGene}.
 
@@ -281,6 +283,9 @@ head(repeats)
 @
 
 
+
+\section{Visualisation}
+
 \subsection{Exporting tracks}
 It is also possible to save the results of a Bioconductor analysis in a browser to enable interactive analysis and integration with other data types, or sharing with collaborators. We shall use the bed format for illustration.
 
@@ -323,7 +328,6 @@ export(sigRanges , con = "topHits.bed")
 
 The export of other formats such as \textit{gff}, \textit{bedGraph}, \textit{wig} and \textit{bigwig} is also possible with \Biocpkg{rtracklayer}. We can also call the UCSC browser directly to display the tracks. See the \Biocpkg{rtracklayer} vignette for details.
 
-\section{Visualisation}
 
 \subsection{ggbio}
 We will now take a brief look at one of the visualisation packages in Bioconductor that takes advantages of the GenomicRanges and GenomicFeatures object-types.
@@ -348,7 +352,7 @@ autoplot(sigRanges , layout = "karyogram")
 autoplot(sigRanges , layout = "circle")
 
 @
-The Manhattan plot is a common way of visualising genome-wide results, and this is implemented as the \Rfunction{plotGrandLinear} function. We have to supply a value to display on the y-axis. This is done by using the \Rfunction{aes} function, which is inherited from \Biocpkg{ggplot2}.
+The Manhattan plot is a common way of visualising genome-wide results, and this is implemented as the \Rfunction{plotGrandLinear} function. We have to supply a value to display on the y-axis. This is done by using the \Rfunction{aes} function, which is inherited from \Rpackage{ggplot2}.
 
 \usecase
 Plot the genomic locations of the significant genes on a linear scale. Modify the colour scheme to show whether each gene is up- or down-regulated
@@ -385,7 +389,7 @@ Repeat the plot, but with a smoothed coverage
 autoplot(bamSubset , stat = "coverage")
 @
 
-The plots produced by \Biocpkg{ggbio} (and indeed \Biocpkg{ggplots2} on which the package is based) are not in standard R graphics format, so techniques like \Rcode{par(mfrow)} for arranging plots on the same page are not applicable. However, \Biocpkg{ggbio} allows the plots to be saved as objects, which can later be arranged by specialist functions such as \Rfunction{tracks}. This function automatically aligns the x-axis of each plot to be on the same scale.
+The plots produced by \Biocpkg{ggbio} (and indeed \Rpackage{ggplot2} on which the package is based) are not in standard R graphics format, so techniques like \Rcode{par(mfrow)} for arranging plots on the same page are not applicable. However, \Biocpkg{ggbio} allows the plots to be saved as objects, which can later be arranged by specialist functions such as \Rfunction{tracks}. This function automatically aligns the x-axis of each plot to be on the same scale.
 
 \usecase
 Make a combined plot of the sample information and transcripts
