@@ -50,6 +50,52 @@ cds = estimateSizeFactors( cds )
 cds = estimateDispersions( cds )
 pasillaRes = nbinomTest( cds, "untreated", "treated" )
 
+library(edgeR)
+##https://gist.github.com/stephenturner/3745236
+
+datafile = system.file( "extdata/pasilla_gene_counts.tsv", package="pasilla" )
+datafile
+ 
+## Read in the data making the row names the first column
+counttable <- read.table(datafile, header=T, row.names=1)
+head(counttable)
+ 
+## Make metadata data.frame
+meta <- data.frame(
+  row.names=colnames(counttable),
+  condition=c("untreated", "untreated", "untreated", "untreated", "treated", "treated", "treated"),
+  libType=c("single", "single", "paired", "paired", "single", "paired", "paired"))
+meta$condition <- relevel(meta$condition, ref="untreated")
+meta
+
+
+## Make design matrix
+condition <- relevel(factor(meta$condition), ref="untreated")
+libType <- factor(meta$libType)
+edesign <- model.matrix(~libType+condition)
+ 
+## Make new DGEList, normalize by library size, and estimate dispersion allowing possible trend with average count size
+e <- DGEList(counts=counttable)
+e <- calcNormFactors(e)
+e <- estimateGLMCommonDisp(e, edesign)
+e <- estimateGLMTrendedDisp(e, edesign) 
+e <- estimateGLMTagwiseDisp(e, edesign)
+ 
+## MDS Plot
+plotMDS(e, main="edgeR MDS Plot")
+ 
+## Biological coefficient of variation plot
+plotBCV(e, cex=0.4, main="edgeR: Biological coefficient of variation (BCV) vs abundance")
+ 
+## Fit the model, testing the coefficient for the treated vs untreated comparison
+efit <- glmFit(e, edesign)
+efit <- glmLRT(efit, coef="conditiontreated")
+ 
+## Make a table of results
+etable <- topTags(efit, n=nrow(e))$table
+etable <- etable[order(etable$FDR), ]
+head(etable)
+pasillaRes <- etable
 
 @
 
@@ -61,11 +107,11 @@ Load the pasilla analysis and familiarise yourself with the contents. Create a d
 <<>>=
 library(GeneticsHTSCourse2013)
 data(pasillaRes)
-topHits <- pasillaRes[order(pasillaRes$padj, decreasing = F)[1:100],]
+topHits <- pasillaRes[order(pasillaRes$PValue, decreasing = F)[1:100],]
 @
 
 \section{Annotation}
-The \Biocpkg{biomaRt} package provides an interface to the biomart website www.biomart.org. Although the databases stored in biomart, the biomaRt package allows the data to be accessed in a consistent manner and without having write complex SQL queries or understand the underlying schema. The databases available through BioMart can be obtained with the \Rfunction{listMarts} function
+The \Biocpkg{biomaRt} package provides an interface to the biomart website www.biomart.org. The biomaRt package allows the data to be accessed in a consistent manner and without having write complex SQL queries or understand the underlying schema. The databases available through BioMart can be obtained with the \Rfunction{listMarts} function
 
 \subsection{BiomaRt}
 
@@ -119,9 +165,9 @@ Annotate the top hits from the DEseq analysis with their genomic locations and e
 <<>>=
 myInfo <- getBM(attributes = c("flybase_gene_id", "chromosome_name", 
 "band", "start_position", "end_position", "external_gene_id"), 
-filters = "flybase_gene_id", values = topHits[, 1], mart = ensembl)
+filters = "flybase_gene_id", values = rownames(topHits), mart = ensembl)
 myInfo
-annotatedHits <- merge(topHits, myInfo, by.x = 1, by.y = 1) 
+annotatedHits <- merge(topHits, myInfo, by.x = 0, by.y = 1) 
 head(annotatedHits)
 @
 
@@ -293,14 +339,14 @@ It is also possible to save the results of a Bioconductor analysis in a browser 
 Select all significant genes from the pasilla analysis and annotate their genome loca- tion. Create a GRanges representation of the locations.
 
 <<>>=
-sigResults <- pasillaRes[which(pasillaRes$padj < 0.1), ]
+sigResults <- pasillaRes[which(pasillaRes$PValue< 0.1), ]
 myInfo <- getBM(attributes = c("flybase_gene_id", "chromosome_name",
 "band", "start_position", "end_position", "external_gene_id"),
-filters = "flybase_gene_id", values = sigResults[, 1], mart = ensembl) 
-myInfo <- merge(sigResults, myInfo, by.x = 1, by.y = 1)
+filters = "flybase_gene_id", values = rownames(sigResults), mart = ensembl) 
+myInfo <- merge(sigResults, myInfo, by.x = 0, by.y = 1)
 sigRanges <- GRanges(paste("chr", myInfo$chromosome_name, sep = ""),
 IRanges(start = myInfo$start_position , end = myInfo$end_position ,
-names = myInfo[, 1]), padj = myInfo$padj, logfc = myInfo$log2FoldChange)
+names = myInfo[, 1]), padj = myInfo$PValue, logfc = myInfo$logFC)
 @
 
 Rather than just representing the genomic locations, the .bed format is also able to colour each range according to some property of the analysis (e.g. direction and magnitude of change) to help highlight particular regions of interest. A score can also be displayed when a particular region is clicked-on.
@@ -338,8 +384,8 @@ The documentation for \Biocpkg{ggbio} is very extensive and contains lots of exa
 Extra background reading can be found on the ggplot2 website; the package on which the principles of ggbio is based.\newline
 {\tt http://ggplot2.org/}
 
-The \Biocpkg{Gviz} package another Bioconductor package that specialising in genomic visualisations, but we will not explore this package in the course.
-A useful function within ggbio is autoplot, which will construct an appropriate plot based on the object-type of the input. For example, if we pass a GRanges object to the function it will plot the genomic locations on a linear scale and label chromosome and positional information on the plot. The style of the plot can be changed by the layout argument.
+The \Biocpkg{Gviz} package is another Bioconductor package that specialising in genomic visualisations, but we will not explore this package in the course.
+A useful function within \Biocpkg{ggbio} is \Rfunction{autoplot}, which will construct an appropriate plot based on the object-type of the input. For example, if we pass a GRanges object to the function it will plot the genomic locations on a linear scale and label chromosome and positional information on the plot. The style of the plot can be changed by the layout argument.
 
 \usecase
 Plot the locations of the significant hits from the DE analysis. Try the default, karyogram and circle layouts
