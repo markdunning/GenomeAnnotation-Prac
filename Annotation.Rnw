@@ -202,6 +202,8 @@ head(chr4Genes)
 chr4ID <- chr4Genes[, 2]
 @
 
+\warning{If you get the error message:\\ \Rcode{unused arguments (columns = "ENSEMBL", keytype = "CHR", keys = "4")} \\ when trying to run the \Rfunction{select}, it is because another R package has defined another function called \Rfunction{select} and over-written the function from \Rpackage{AnnotationDBI} that we intended to use. If this occurs the statement \\ \Rcode{select <- AnnotationDbi::select} \\ should allow you to run the line of code.}
+
 \subsection{Transcript packages}
 
 Bioconductor provide a number of pre-built packages that have a database of all transcript information for a particular organism. The package we are going to use is \Biocannopkg{TxDb.Dmelanogaster.UCSC.dm3.ensGene}.
