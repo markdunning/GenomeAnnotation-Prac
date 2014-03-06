@@ -33,80 +33,51 @@ BiocStyle::latex()
 This practical will use the data from the Pasilla dataset, which you will have already analysed in the RNA-seq pratical. We will assume that the gene counts data have already been analysed. \textbf{You do not need to type this code, it is for your reference only.}
 
 <<>>=
-library(DESeq)
-
-datafile = system.file( "extdata/pasilla_gene_counts.tsv", package="pasilla" )
-pasillaCountTable = read.table( datafile, header=TRUE, row.names=1 )
-pasillaDesign = data.frame(row.names = colnames( pasillaCountTable ),
-condition = c("untreated","untreated","untreated","untreated",
-  "treated","treated","treated"),
-libType=c("single-end","single-end", "paired-end","paired-end","single-end", "paired-end","paired-end"))
-pairedSamples = pasillaDesign$libType == "paired-end"
-condition = factor( c( "untreated", "untreated", "treated", "treated" ) )
-countTable = pasillaCountTable[ , pairedSamples ]
-condition = factor( c( "untreated", "untreated", "treated", "treated" ) )
-cds = newCountDataSet( countTable, condition )
-cds = estimateSizeFactors( cds )
-cds = estimateDispersions( cds )
-pasillaRes = nbinomTest( cds, "untreated", "treated" )
 
 library(edgeR)
-##https://gist.github.com/stephenturner/3745236
 
 datafile = system.file( "extdata/pasilla_gene_counts.tsv", package="pasilla" )
 datafile
  
-## Read in the data making the row names the first column
-counttable <- read.table(datafile, header=T, row.names=1)
-head(counttable)
- 
-## Make metadata data.frame
-meta <- data.frame(
-  row.names=colnames(counttable),
-  condition=c("untreated", "untreated", "untreated", "untreated", "treated", "treated", "treated"),
-  libType=c("single", "single", "paired", "paired", "single", "paired", "paired"))
-meta$condition <- relevel(meta$condition, ref="untreated")
-meta
+pasillaCountTable = read.table( datafile, header=TRUE, row.names=1 )
+
+head(pasillaCountTable)
+
+pasillaDesign = data.frame(
+ row.names = colnames( pasillaCountTable ),
+ condition = c( "untreated", "untreated", "untreated",
+ "untreated", "treated", "treated", "treated" ),
+ libType = c( "single-end", "single-end", "paired-end",
+ "paired-end", "single-end", "paired-end", "paired-end" ) )
 
 
-## Make design matrix
-condition <- relevel(factor(meta$condition), ref="untreated")
-libType <- factor(meta$libType)
-edesign <- model.matrix(~libType+condition)
- 
-## Make new DGEList, normalize by library size, and estimate dispersion allowing possible trend with average count size
-e <- DGEList(counts=counttable)
-e <- calcNormFactors(e)
-e <- estimateGLMCommonDisp(e, edesign)
-e <- estimateGLMTrendedDisp(e, edesign) 
-e <- estimateGLMTagwiseDisp(e, edesign)
- 
-## MDS Plot
-plotMDS(e, main="edgeR MDS Plot")
- 
-## Biological coefficient of variation plot
-plotBCV(e, cex=0.4, main="edgeR: Biological coefficient of variation (BCV) vs abundance")
- 
-## Fit the model, testing the coefficient for the treated vs untreated comparison
-efit <- glmFit(e, edesign)
-efit <- glmLRT(efit, coef="conditiontreated")
- 
-## Make a table of results
-etable <- topTags(efit, n=nrow(e))$table
-etable <- etable[order(etable$FDR), ]
-head(etable)
-pasillaRes <- etable
+pasillaDesign
+
+pairedSamples = pasillaDesign$libType == "paired-end"
+countTable = pasillaCountTable[ , pairedSamples ]
+condition = pasillaDesign$condition[ pairedSamples ]
+
+y <- DGEList(counts=countTable,group=condition)
+y <- calcNormFactors(y)
+y <- estimateCommonDisp(y)
+y <- estimateTagwiseDisp(y)
+et <- exactTest(y)
+topTags(et)
+
+
+pasillaRes <- topTags(et,n=nrow(countTable))$table
 
 @
 
-The \Robject{pasillaRes} object has been saved in the \Rpackage{GeneticsHTSCourse2013} package that accompanies this course.
+The \Robject{pasillaRes} object has been saved in the \Rpackage{GeneticsHTSCourse} package that accompanies this course.
 
 \usecase
 Load the pasilla analysis and familiarise yourself with the contents. Create a data frame of the 100 most significant results.
 
 <<>>=
-library(GeneticsHTSCourse2013)
+library(GeneticsHTSCourse)
 data(pasillaRes)
+
 topHits <- pasillaRes[order(pasillaRes$PValue, decreasing = F)[1:100],]
 @
 
@@ -133,7 +104,7 @@ Retrieve the names of all genes for Drosophilla. How many genes are there?
 
 <<>>=
 allGenes <- getBM(attributes = c("ensembl_gene_id"), mart = ensembl)
-length(allGenes)
+dim(allGenes)
 @
 
 When restricting the search to particular query items (e.g. genes) we need to specify both filters and values.
@@ -145,7 +116,7 @@ Retrieve the ensembl, transcript and peptide ID for the first 10 genes
 filt <- listFilters(ensembl)
 head(filt, 10)
 getBM(attributes = attr[1:3, 1], filters = "ensembl_gene_id",
-      values = allGenes[1:10], mart = ensembl)
+      values = allGenes[1:10,1], mart = ensembl)
 
 @
 
@@ -224,9 +195,9 @@ Use the appropriate organism package to retrieve the ensembl IDs of all genes lo
 <<>>=
 library(org.Dm.eg.db) 
 dm <- org.Dm.eg.db
-cols(dm)
+columns(dm)
 keytypes(dm)
-chr4Genes <- select(dm, cols = "ENSEMBL", keytype = "CHR", keys = "4") 
+chr4Genes <- select(dm, columns = "ENSEMBL", keytype = "CHR", keys = "4") 
 head(chr4Genes)
 chr4ID <- chr4Genes[, 2]
 @
@@ -320,6 +291,8 @@ gffOverlap <- summarizeOverlaps(gffRange , bam)
 \usecase
 Find out what tracks are available for the dm3 genome. Download the RepeatMasker track.
 
+\warning{The \Rfunction{getTable} function below seems to take a long time to load. Please don't wait too long for it to finish}
+
 <<>>=
 mySession <- browserSession()
 track.names <- trackNames(ucscTableQuery(mySession))
@@ -336,7 +309,7 @@ head(repeats)
 It is also possible to save the results of a Bioconductor analysis in a browser to enable interactive analysis and integration with other data types, or sharing with collaborators. We shall use the bed format for illustration.
 
 \usecase
-Select all significant genes from the pasilla analysis and annotate their genome loca- tion. Create a GRanges representation of the locations.
+Select all significant genes from the pasilla analysis and annotate their genome location. Create a \Rclass{GRanges} representation of the locations.
 
 <<>>=
 sigResults <- pasillaRes[which(pasillaRes$PValue< 0.1), ]
@@ -361,10 +334,10 @@ logfc <-  pmin(logfc , 3)
 Col <- rbPal(10)[as.numeric(cut(logfc, breaks = 10))]
 @
 
-The colours and score can be saved in the \Rclass{GRanges} object and {\tt score} and {\tt itemRgb} columns respectively and will be used to construct the track when the export is called.
+The colours and score can be saved in the \Rclass{GRanges} object and \Rcode{score} and \Rcode{itemRgb} columns respectively and will be used to construct the track when the export is called.
 
 \usecase
-Export the signifcant results from the DE analysis as a .bed track.
+Export the signifcant results from the DE analysis as a \textit{.bed} track.
 
 <<>>=
 mcols(sigRanges)$score <- Score
