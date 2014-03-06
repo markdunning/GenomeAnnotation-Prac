@@ -290,18 +290,18 @@ gffRange
 gffOverlap <- summarizeOverlaps(gffRange , bam) 
 @
 
-\usecase
-Find out what tracks are available for the dm3 genome. Download the RepeatMasker track.
+%5\usecase
+%5Find out what tracks are available for the dm3 genome. Download the RepeatMasker track.
 
-\warning{The \Rfunction{getTable} function below seems to take a long time to load. Please don't wait too long for it to finish}
+%%\warning{The \Rfunction{getTable} function below seems to take a long time to load. Please don't wait too long for it to finish}
 
-<<>>=
-mySession <- browserSession()
-track.names <- trackNames(ucscTableQuery(mySession))
-repeats <- getTable(ucscTableQuery(mySession, track = "rmsk",
-table = "rmsk")) 
-head(repeats)
-@
+%%%<<>>=
+%%mySession <- browserSession()
+%%track.names <- trackNames(ucscTableQuery(mySession))
+%%repeats <- getTable(ucscTableQuery(mySession, track = "rmsk",
+%%table = "rmsk")) 
+%%head(repeats)
+%%@
 
 
 
