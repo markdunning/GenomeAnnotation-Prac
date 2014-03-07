@@ -30,7 +30,7 @@ BiocStyle::latex()
 \tableofcontents
 \section{Introduction}
 
-This practical will use the data from the Pasilla dataset, which you will have already analysed in the RNA-seq pratical. We will assume that the gene counts data have already been analysed. \textbf{You do not need to type this code, it is for your reference only.}
+This practical uses data from a Drosophilla dataset where the \emph{pasilla} gene has been knocked-out. The dataset has been used many times to demonstrate RNA-seq workflows and the data are available and discussed in various packages in Bioconductor (\Biocexptpkg{pasilla}, \Biocexptpkg{pasillaBamSubset}, \Biocpkg{DEseq}). Here we show the analysis of this dataset using edgeR and we will start this practical from the table of top tags. \textbf{You do not need to type this code, it is for your reference only.}
 
 <<>>=
 
