@@ -12,7 +12,7 @@
 library("knitr")
 opts_chunk$set(tidy=FALSE,dev="png",fig.show="hide",
                fig.width=4,fig.height=4.5,
-               message=FALSE,eval=F)
+               message=FALSE,eval=FALSE)
 @ 
 
 <<style, eval=TRUE, echo=FALSE, results="asis">>=
@@ -32,7 +32,7 @@ BiocStyle::latex()
 
 This practical uses data from a Drosophilla dataset where the \emph{pasilla} gene has been knocked-out. The dataset has been used many times to demonstrate RNA-seq workflows and the data are available and discussed in various packages in Bioconductor (\Biocexptpkg{pasilla}, \Biocexptpkg{pasillaBamSubset}, \Biocpkg{DEseq}). Here we show the analysis of this dataset using edgeR and we will start this practical from the table of top tags. \textbf{You do not need to type this code, it is for your reference only.}
 
-<<>>=
+<<eval=FALSE>>=
 
 library(edgeR)
 
@@ -69,25 +69,26 @@ pasillaRes <- topTags(et,n=nrow(countTable))$table
 
 @
 
-The \Robject{pasillaRes} object has been saved in the \Rpackage{GeneticsHTSCourse} package that accompanies this course.
+The \Robject{pasillaRes} object has been saved in the {\tt exampleData} folder.
 
 \usecase
 Load the pasilla analysis and familiarise yourself with the contents. Create a data frame of the 100 most significant results.
 
 <<>>=
-library(GeneticsHTSCourse)
-data(pasillaRes)
-
+load("exampleData//pasillaRes.rda")
 topHits <- pasillaRes[order(pasillaRes$PValue, decreasing = F)[1:100],]
+head(topHits)
 @
 
-\section{Annotation}
-The \Biocpkg{biomaRt} package provides an interface to the biomart website www.biomart.org. The biomaRt package allows the data to be accessed in a consistent manner and without having write complex SQL queries or understand the underlying schema. The databases available through BioMart can be obtained with the \Rfunction{listMarts} function
+The \Robject{topHits} data frame provides us with a list of genes that are found to be \textit{statistically significant}. However, it is a separate investigation to determine if the genes are \textit{Biologically significant}. We will \textit{annotate} our list of differentially expressed genes using the online resource biomart.
 
-\subsection{BiomaRt}
+\section{Annotation using an online resource}
+The \Biocpkg{biomaRt} package provides an interface to the \href{www.biomart.org}{{\color{blue}biomart}} website; allowing the data to be accessed in a consistent manner and without having write complex SQL queries or understand the underlying schema. The databases available through BioMart can be obtained with the \Rfunction{listMarts} function
+
+\subsection{General BiomaRt Usage}
 
 \usecase
-Get a list of all databases available through the biomaRt package and connect to the Drosophilla one. 
+Get a list of all databases available through the \Biocpkg{biomaRt} package and connect to the Drosophilla one. 
 <<>>=
 library(biomaRt)
 listMarts()
@@ -130,6 +131,9 @@ getBM(attributes = "ensembl_gene_id", filters = c("chromosome_name",
 
 @
 
+\subsection{Annotating the RNA-seq results}
+
+
 \usecase
 Annotate the top hits from the DEseq analysis with their genomic locations and external IDs and create a merged table containing both DESeq results and the annotations.
 
@@ -137,10 +141,17 @@ Annotate the top hits from the DEseq analysis with their genomic locations and e
 myInfo <- getBM(attributes = c("flybase_gene_id", "chromosome_name", 
 "band", "start_position", "end_position", "external_gene_id"), 
 filters = "flybase_gene_id", values = rownames(topHits), mart = ensembl)
+
 myInfo
+
 annotatedHits <- merge(topHits, myInfo, by.x = 0, by.y = 1) 
+
 head(annotatedHits)
 @
+
+\section{Annotation using pre-built packages}
+
+A full list of annotation packages is available on the Bioconductor \href{http://tinyurl.com/l7hsus5}{{\color{blue}website}}.
 
 \subsection{Genome sequences}
 
@@ -178,25 +189,42 @@ Various Biostrings operations could now be performed on these sequences. Some su
 
 <<>>=
 substr(myseqs , 1, 10) 
-translate(myseqs) 
+translate(myseqs)
+source("scripts/gcFunction.R")
 gcFunction(myseqs)
 
 @
 
-
-In the analysis of the pasilla dataset, we allocated reads to genes. However, in this section we will explore the ways of counting reads that align to other genomic regions of interest. In this case we will use exons. An example bam file is provided in the \Biocexptpkg{pasillaBamSubset} package, but only reads on chromosome 4 are provided.
-
 \subsection{Organism Annotation}
-In order to use the example bam file, which is chromosome 4 only, we will have to get the IDs of genes that occur on chromosome 4. We illustrate this using the \Biocannopkg{org.Dm.eg.db} package.
 
-\usecase
-Use the appropriate organism package to retrieve the ensembl IDs of all genes located on chromosome 4 of Drosophilla.
+\subsubsection{Alternative annotation of RNA-seq results}
+
 
 <<>>=
 library(org.Dm.eg.db) 
 dm <- org.Dm.eg.db
 columns(dm)
 keytypes(dm)
+rownames(topHits)
+
+myInfo2 <- select(dm, keytype = "FLYBASE",
+      columns =c("ENSEMBL", "CHRLOC","CHRLOCEND", "SYMBOL","GO") ,keys=rownames(topHits))
+
+@
+
+
+\subsection{Alternative counting of the pasilla dataset}
+
+In the analysis of the pasilla dataset, we allocated reads to genes. However, in this section we will explore the ways of counting reads that align to other genomic regions of interest. In this case we will use exons. An example bam file is provided in the \Biocexptpkg{pasillaBamSubset} package, but only reads on chromosome 4 are provided.
+
+
+In order to use the example bam file we will have to get the IDs of genes that occur on chromosome 4. We illustrate this using the \Biocannopkg{org.Dm.eg.db} organism package.
+
+\usecase
+Use the appropriate organism package to retrieve the ensembl IDs of all genes located on chromosome 4 of Drosophilla.
+
+<<>>=
+
 chr4Genes <- select(dm, columns = "ENSEMBL", keytype = "CHR", keys = "4") 
 head(chr4Genes)
 chr4ID <- chr4Genes[, 2]
@@ -206,9 +234,9 @@ chr4ID <- chr4Genes[, 2]
 
 \subsection{Transcript packages}
 
-Bioconductor provide a number of pre-built packages that have a database of all transcript information for a particular organism. The package we are going to use is \Biocannopkg{TxDb.Dmelanogaster.UCSC.dm3.ensGene}.
+Bioconductor provide a number of pre-built packages that have a database of all transcript information for a particular organism. The package we are going to use is \Biocannopkg{TxDb.Dmelanogaster.UCSC.dm3.ensGene}. A full list of available transcript packages is available on the Bioconductor \href{http://tinyurl.com/l7hsus5}{{\color{blue}website}}. Look for the pacakges that start with {\tt TxDb.}.
 
-As its name suggests, this package was built from the UCSC tables for the dm3 genome and uses Ensembl genes as an identifier. Convenient functions exist that can return the gene structure as a \Rclass{GRanges} object.
+As its name suggests, \Biocannopkg{TxDb.Dmelanogaster.UCSC.dm3.ensGene} was built from the UCSC tables for the dm3 genome and uses Ensembl genes as an identifier. Convenient functions exist that can return the gene structure as a \Rclass{GRanges} object.
 
 \usecase
 Get all the exons for all genes on chromosome 4
@@ -223,6 +251,9 @@ exo4 <- exo[names(exo) %in% chr4ID]
 length(exo4)
 @
 
+\bioccomment{If you cannot find a TranscriptDb package that provides the annotation you need, you can use the \Rfunction{makeTxDbPackage} function to create one from a UCSC browser, biomaRt or another source. See the help page for more details.}
+
+
 \subsection{Exon Counting}
 
 \usecase
@@ -230,6 +261,7 @@ Read the example bam file from the \Biocexptpkg{pasillaBamSubset} package. Verif
 
 <<>>=
 library(pasillaBamSubset)
+library(GenomicAlignments)
 bam <- readGAlignments(untreated3_chr4(), use.name = TRUE)
 table(seqnames(bam))
 @
@@ -315,13 +347,20 @@ Select all significant genes from the pasilla analysis and annotate their genome
 
 <<>>=
 sigResults <- pasillaRes[which(pasillaRes$PValue< 0.1), ]
+
 myInfo <- getBM(attributes = c("flybase_gene_id", "chromosome_name",
 "band", "start_position", "end_position", "external_gene_id"),
 filters = "flybase_gene_id", values = rownames(sigResults), mart = ensembl) 
+
+
 myInfo <- merge(sigResults, myInfo, by.x = 0, by.y = 1)
+
+
 sigRanges <- GRanges(paste("chr", myInfo$chromosome_name, sep = ""),
 IRanges(start = myInfo$start_position , end = myInfo$end_position ,
 names = myInfo[, 1]), padj = myInfo$PValue, logfc = myInfo$logFC)
+
+
 @
 
 Rather than just representing the genomic locations, the .bed format is also able to colour each range according to some property of the analysis (e.g. direction and magnitude of change) to help highlight particular regions of interest. A score can also be displayed when a particular region is clicked-on.
@@ -331,8 +370,10 @@ Create a score from the p-values and colour scheme based on the fold-change.
 <<>>=
 Score <- -log10(sigRanges$padj)
 rbPal <-colorRampPalette(c("red", "blue"))
+
 logfc <-  pmax(sigRanges$logfc, -3) 
 logfc <-  pmin(logfc , 3)
+
 Col <- rbPal(10)[as.numeric(cut(logfc, breaks = 10))]
 @
 
@@ -343,12 +384,15 @@ Export the signifcant results from the DE analysis as a \textit{.bed} track.
 
 <<>>=
 mcols(sigRanges)$score <- Score
+
 mcols(sigRanges)$itemRgb <- Col
+
 export(sigRanges , con = "topHits.bed")
 @
 
 The export of other formats such as \textit{gff}, \textit{bedGraph}, \textit{wig} and \textit{bigwig} is also possible with \Biocpkg{rtracklayer}. We can also call the UCSC browser directly to display the tracks. See the \Biocpkg{rtracklayer} vignette for details.
 
+\fixme{Add IGV example?}
 
 \subsection{ggbio}
 We will now take a brief look at one of the visualisation packages in Bioconductor that takes advantages of the GenomicRanges and GenomicFeatures object-types.
@@ -360,6 +404,8 @@ Extra background reading can be found on the ggplot2 website; the package on whi
 {\tt http://ggplot2.org/}
 
 The \Biocpkg{Gviz} package is another Bioconductor package that specialising in genomic visualisations, but we will not explore this package in the course.
+
+
 A useful function within \Biocpkg{ggbio} is \Rfunction{autoplot}, which will construct an appropriate plot based on the object-type of the input. For example, if we pass a GRanges object to the function it will plot the genomic locations on a linear scale and label chromosome and positional information on the plot. The style of the plot can be changed by the layout argument.
 
 \usecase
@@ -370,7 +416,6 @@ library(ggbio)
 autoplot(sigRanges)
 autoplot(sigRanges[seqnames(sigRanges) == "chrX"])
 autoplot(sigRanges , layout = "karyogram")
-autoplot(sigRanges , layout = "circle")
 
 @
 The Manhattan plot is a common way of visualising genome-wide results, and this is implemented as the \Rfunction{plotGrandLinear} function. We have to supply a value to display on the y-axis. This is done by using the \Rfunction{aes} function, which is inherited from \Rpackage{ggplot2}.
@@ -426,7 +471,7 @@ The combined plot can also be embellished by adding an Ideogram to show the loca
 \usecase
 Get the ideogram data for the drosophilla genome and add to the plot
 
-<<>>=
+<<eval=FALSE>>=
 plotIdeogram(genome = "dm3")
 plotIdeogram(genome = "dm3", subchr = "chr4")
 start <- min(start(bamSubset))
@@ -434,5 +479,7 @@ end <- max(end(bamSubset))
 id <- plotIdeogram(genome = "dm3", subchr = "chr4", zoom.region = c(start,end))
 tracks(id, p1, p2)
 @
+
+
 
 \end{document}
