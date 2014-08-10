@@ -30,7 +30,7 @@ BiocStyle::latex()
 \tableofcontents
 \section{Introduction}
 
-This practical uses data from a Drosophilla dataset where the \emph{pasilla} gene has been knocked-out. The dataset has been used many times to demonstrate RNA-seq workflows and the data are available and discussed in various packages in Bioconductor (\Biocexptpkg{pasilla}, \Biocexptpkg{pasillaBamSubset}, \Biocpkg{DEseq}). Here we show the analysis of this dataset using edgeR and we will start this practical from the table of top tags. \textbf{You do not need to type this code, it is for your reference only.}
+This practical uses data from a Drosophilla dataset where the \emph{pasilla} gene has been knocked-out. The dataset has been used many times to demonstrate RNA-seq workflows and the data are available and discussed in various packages in Bioconductor (\Biocexptpkg{pasilla}, \Biocexptpkg{pasillaBamSubset}, \Biocpkg{DEseq}). Here we show the analysis of this dataset using edgeR and we will start this practical from the table of top tags. \textbf{You do not need to type this code, it is for your reference only, or if you want to run the practical outside of the course.}
 
 <<eval=FALSE>>=
 
@@ -132,7 +132,7 @@ getBM(attributes = "ensembl_gene_id", filters = c("chromosome_name",
 @
 
 \subsection{Annotating the RNA-seq results}
-
+We can use \Biocpkg{biomaRt} to annotate the results of our RNA-seq analysis. Firstly, we have to recognise that the row names of the \Robject{topHits} data frame are Ensembl IDs. Then it is a matter of deciding what attributes we want to retrieve from the database.
 
 \usecase
 Annotate the top hits from the DEseq analysis with their genomic locations and external IDs and create a merged table containing both DESeq results and the annotations.
@@ -140,7 +140,7 @@ Annotate the top hits from the DEseq analysis with their genomic locations and e
 <<>>=
 myInfo <- getBM(attributes = c("flybase_gene_id", "chromosome_name", 
 "band", "start_position", "end_position", "external_gene_id"), 
-filters = "flybase_gene_id", values = rownames(topHits), mart = ensembl)
+filters = "ensembl_gene_id", values = rownames(topHits), mart = ensembl)
 
 myInfo
 
@@ -149,12 +149,14 @@ annotatedHits <- merge(topHits, myInfo, by.x = 0, by.y = 1)
 head(annotatedHits)
 @
 
+The resulting table, \Robject{annotatedHits}, can now be used to ease the interpretation of the RNA-seq analysis and can be shared with collaborators.
+
 \section{Annotation using pre-built packages}
 
-A full list of annotation packages is available on the Bioconductor \href{http://tinyurl.com/l7hsus5}{{\color{blue}website}}.
+As an alternative to \Biocpkg{biomaRt}, we can use the variety of pre-built databases that are available as Bioconductor packages. The main advantage of this approach is that we do not require an internet connection to perform the annotation, once the package is installed. A full list of annotation packages is available on the Bioconductor \href{http://tinyurl.com/l7hsus5}{{\color{blue}website}}.
 
 \subsection{Genome sequences}
-
+For instance, we can obtain pre-built and easily accessible packages to interrogate genome sequences. Such packages take advantage of the \Biocpkg{Biostrings} infrastructure that you will have already seen. 
 \usecase
 Load the package that provides the genome representation for Drosophila
 <<>>=
@@ -164,29 +166,52 @@ library(BSgenome.Dmelanogaster.UCSC.dm3)
 Dmelanogaster
 @
 
+We can retrieve the sequence for a particular chromosome by subsetting using the {\tt [[} operator and providing the name of a chromosome.
+
 \usecase
-Retrieve the sequence for chromosome X and subset to get the sequence for gene FBgn0040357.
+Retrieve the sequence for chromosome X by subsetting. Then create a plot to show the lengths of all chromosomes.\bioccomment{You can use the length once you have retrieved each chromosome sequence}.
+
+<<>>=
+names(Dmelanogaster)
+Dmelanogaster[["chrX"]]
+chrLen <- sapply(names(Dmelanogaster), function(x) length(Dmelanogaster[[x]]))
+barplot(chrLen, horiz=TRUE,las=2)
+@
+
+Biostrings genomes have also been designed to inter-operate with the GenomicRanges functions and classes. A useful consequence is that you can access the genomic sequence for a particular gene by translating the coordinates of the gene into a \Robject{GRanges} object.
+
+\usecase
+Use \Biocpkg{biomaRt} to get the coordinates of the fly gene FBgn0040357 on Chromosome X. Translate this into a \Robject{GRanges} object and retreive the genomic sequence.
+
 <<>>=
 geneInfo <- getBM(attributes = c("chromosome_name", "start_position", "end_position"),
 filters = "ensembl_gene_id", values = "FBgn0040357", ensembl)
+
 gr <- GRanges("chrX", IRanges(geneInfo$start_position, geneInfo$end_position)) 
 seq <- getSeq(Dmelanogaster , gr)
 seq
 @
 
+We can, of course, specify ranges for mutliple genes in the same \Robject{GRanges} object. They can also be manipulated, expanded, collapsed, etc using any of the operations we saw yesterday.
 
 \usecase
-Retrieve sequences for the annotated results from the DEseq analysis and write them out as a Fasta file
+Create a \Robject{GRanges} object to represent the top genes from the RNA-seq analysis. Find the genomic sequencesof each of these genes, and also the sequences 50 bases upstream.
+
 <<>>=
-myseqs <- getSeq(Dmelanogaster, paste("chr", annotatedHits$chromosome_name, sep = ""), 
-annotatedHits$start_position , annotatedHits$end_position)
+gr2 <- GRanges(paste0("chr",annotatedHits$chromosome_name), 
+               IRanges(annotatedHits$start_position, annotatedHits$end_position))
+flankGr <- flank(gr2, 50)
+myseqs <- getSeq(Dmelanogaster,gr2)
 myseqs
-names(myseqs) <- annotatedHits[, 1] 
-writeXStringSet(myseqs , file = "topGenes.fa")
+
+upSeqs <- getSeq(Dmelanogaster,flankGr)
+upSeqs
+
 @
 
-Various Biostrings operations could now be performed on these sequences. Some suggestions are given below.
+\bioccomment{In the next section, we will see how to retrieve \Robject{GRanges} for genes so that we do not have to create these object manually.}
 
+Various Biostrings operations could now be performed on these sequences. Some suggestions are given below.
 <<>>=
 substr(myseqs , 1, 10) 
 translate(myseqs)
@@ -195,28 +220,47 @@ gcFunction(myseqs)
 
 @
 
-\subsection{Organism Annotation}
+\Biocpkg{Biostrings} also allows us to export sequence data so that we can process them in another tool.
 
-\subsubsection{Alternative annotation of RNA-seq results}
+\usecase
+Export the upstream sequences a \textit{fasta} file.
+<<>>=
+names(upSeqs) <- annotatedHits[, 1] 
+writeXStringSet(upSeqs , file = "topGenes.fa")
+@
 
+
+\subsection{Organism-level Annotation}
+
+So-called organism level packages provide an alternative to \Biocpkg{biomaRt} and permit annotation queries offline. Each package is built around a central identifier (e.g. Entrez ID) and meta data surrounding the annotation sources used can be displayed once such an organism package has been installed and loaded.
+
+The terminology of {\tt columns} and {\tt keys} is equivalent to {\tt attributes} and {\tt filters} used by \Biocpkg{biomaRt}. The valid columns and keys can be interrogated using \Rfunction{columns} and \Rfunction{keytypes}. 
+
+
+\usecase Load the Drosophilla annotation package and display the metadata describing how the package was created. Find out what information can be retrieved from the package and what types of key can be used.
+
+\bioccomment{For covenience, we often assign a shorter name to the annotation package.}
 
 <<>>=
 library(org.Dm.eg.db) 
 dm <- org.Dm.eg.db
 columns(dm)
 keytypes(dm)
-rownames(topHits)
-
-myInfo2 <- select(dm, keytype = "FLYBASE",
-      columns =c("ENSEMBL", "CHRLOC","CHRLOCEND", "SYMBOL","GO") ,keys=rownames(topHits))
-
 @
 
+The \Rfunction{select} function is used to make the query. We have to supply a set of valid keys and columns.
 
-\subsection{Alternative counting of the pasilla dataset}
+\usecase
+Annotate your RNA-seq results using the organism package. Choose any columns that you feel might be interesting.
 
-In the analysis of the pasilla dataset, we allocated reads to genes. However, in this section we will explore the ways of counting reads that align to other genomic regions of interest. In this case we will use exons. An example bam file is provided in the \Biocexptpkg{pasillaBamSubset} package, but only reads on chromosome 4 are provided.
+<<>>=
+myInfo2 <- select(dm, keytype = "FLYBASE",
+      columns =c("ENSEMBL", "MAP","CHR","GENENAME","SYMBOL") ,keys=rownames(topHits))
 
+myInfo2
+@
+
+In the analysis of the pasilla dataset, we allocated reads to genes. However, in this section we will explore the ways of counting reads that align to other genomic regions of interest. In this case we will use \textit{exons} and have to re-visit the orginal aligned reads. An example bam file is provided in the \Biocexptpkg{pasillaBamSubset} package, but only reads on chromosome 4 are provided.
 
 In order to use the example bam file we will have to get the IDs of genes that occur on chromosome 4. We illustrate this using the \Biocannopkg{org.Dm.eg.db} organism package.
 
@@ -234,9 +278,11 @@ chr4ID <- chr4Genes[, 2]
 
 \subsection{Transcript packages}
 
-Bioconductor provide a number of pre-built packages that have a database of all transcript information for a particular organism. The package we are going to use is \Biocannopkg{TxDb.Dmelanogaster.UCSC.dm3.ensGene}. A full list of available transcript packages is available on the Bioconductor \href{http://tinyurl.com/l7hsus5}{{\color{blue}website}}. Look for the pacakges that start with {\tt TxDb.}.
+Bioconductor provide a number of pre-built packages that have a database of all transcript information for a particular organism. The package we are going to use is \Biocannopkg{TxDb.Dmelanogaster.UCSC.dm3.ensGene}. A full list of available transcript packages is available on the Bioconductor \href{http://tinyurl.com/l7hsus5}{{\color{blue}website}}. Look for the packages that start with {\tt TxDb.}.
 
-As its name suggests, \Biocannopkg{TxDb.Dmelanogaster.UCSC.dm3.ensGene} was built from the UCSC tables for the dm3 genome and uses Ensembl genes as an identifier. Convenient functions exist that can return the gene structure as a \Rclass{GRanges} object.
+As its name suggests, \Biocannopkg{TxDb.Dmelanogaster.UCSC.dm3.ensGene} was built from the UCSC tables for the dm3 genome and uses Ensembl genes as an identifier. Convenient functions exist that can return the gene structure as a \Rclass{GRanges} object. One such function is \Rfunction{exonsBy} which returns a list of \Robject{GRanges} objects, each item in the list pertaining to a particular gene. Thus, the output of \Rfunction{exonsBy} can be subset in the usual manner ({\tt '[[}').
+
+\bioccomment{transcripts and cds regions can be selected in a similar fashion. See the help pages of \Rfunction{intronsBy} and \Rfunction{cdsBy}}
 
 \usecase
 Get all the exons for all genes on chromosome 4
@@ -244,8 +290,10 @@ Get all the exons for all genes on chromosome 4
 <<>>=
 library(TxDb.Dmelanogaster.UCSC.dm3.ensGene) 
 tx <- TxDb.Dmelanogaster.UCSC.dm3.ensGene
+
 exo <- exonsBy(tx, "gene")
 exo
+
 length(exo)
 exo4 <- exo[names(exo) %in% chr4ID]
 length(exo4)
@@ -254,18 +302,17 @@ length(exo4)
 \bioccomment{If you cannot find a TranscriptDb package that provides the annotation you need, you can use the \Rfunction{makeTxDbPackage} function to create one from a UCSC browser, biomaRt or another source. See the help page for more details.}
 
 
-\subsection{Exon Counting}
-
 \usecase
-Read the example bam file from the \Biocexptpkg{pasillaBamSubset} package. Verify that only chromosome 4 reads are included in the object
+Read the example {\tt untreated3\_chr4} bam file from the \Biocexptpkg{pasillaBamSubset} package. Verify that only chromosome 4 reads are included in the object
 
+\bioccomment{untreated3\_chr4() is a convenient function to give the absolute location of the example file in the \Biocexptpkg{pasillaBamSubset} package.}
 <<>>=
 library(pasillaBamSubset)
 library(GenomicAlignments)
 bam <- readGAlignments(untreated3_chr4(), use.name = TRUE)
 table(seqnames(bam))
 @
-We are now in a position to begin overlapping reads with exons. You should have already seen the \Rfunction{findOverlaps} function that will report the amount of ovelap between two sets of ranges
+We are now in a position to begin overlapping reads with exons. You should have already seen the \Rfunction{findOverlaps} function that will report the amount of ovelap between two sets of ranges. We will start simple by just doing an overlap of a single gene to make sure that we understand the output
 
 \usecase
 Use the \Rfunction{findOverlaps} function to count the number of reads covering each exon of FBgn0002521.
@@ -294,10 +341,10 @@ olapExon <- summarizeOverlaps(exonRanges , bam)
 countExons <- assays(olapExon)$counts
 countExons
 @
-The \Rfunction{summarizeOverlaps} function can also take the location of one or more bam files as an argument. This means that the processing of reads and counting is handled in one step.
+The \Rfunction{summarizeOverlaps} function can also take the location of one or more bam files as an argument. This means that the processing of reads and counting is handled in one step. However, we have to use the special \Rfunction{BamFileList} constructor when dealing with multiple files.
 
 \usecase
-Obtain counts of chromosome 4 genes in the bam files included with the \Biocexptpkg{pasillaSubset} package.
+Obtain counts of chromosome 4 genes for the bam files included with the \Biocexptpkg{pasillaSubset} package.
 
 <<>>=
 fls <- c(untreated3_chr4(), untreated1_chr4())
@@ -306,7 +353,7 @@ multiOlap <- summarizeOverlaps(exo4, BamFileList(fls))
 head(assays(multiOlap)$counts)
 @
 
-\subsection{Importing Tracks}
+\subsection{Importing and annotating using custom tracks}
 Genome browser or other tracks are often distributed as files in the formats gff, bed, wig etc. The package \Biocpkg{rtracklayer} provides infrastrucutre to import files in these formats and create a \Rclass{GRanges} representation.
 
 \usecase
@@ -335,7 +382,7 @@ gffOverlap <- summarizeOverlaps(gffRange , bam)
 %%head(repeats)
 %%@
 
-
+\subsection{Annotating a set of genomic variants}
 
 \section{Visualisation}
 
