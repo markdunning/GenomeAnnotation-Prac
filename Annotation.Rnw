@@ -385,12 +385,23 @@ gffOverlap <- summarizeOverlaps(gffRange , bam)
 
 \subsection{Annotating a set of genomic variants}
 
-If given a set of genomic variants (i.e. single-nucleotide variants or indels), it is a common task to be 
+If given a set of genomic variants (i.e. single-nucleotide variants or indels), it is a common task to see where each variant is located with respect to a gene and what effect, if any, they have on coding. Most variant-calling tools produce output in \textit{vcf} format, which emerged as a standard file format from the 1000 genomes project. The \Biocpkg{VariantAnnotation} package provides infrastrucure for reading and manipulating variant calls in this format.
+
+As an example, we will use variants that were called on chromosome 22 using 'samtools' for three Hapmap individuals. The vcf file can be found in the {\tt exampleData} folder.
 <<>>=
 library(VariantAnnotation)
 myvcf <- readVcf("exampleData//chr22.flt.vcf","hg19")
+myvcf
+@
+\bioccomment{We have to specify a 'genome' version when we read the file in}
+
+\fixme{Exploring the contents of the vcf file}
+<<>>=
+
+
 @
 
+It is a common
 
 <<>>=
 library(SNPlocs.Hsapiens.dbSNP.20101109)
