@@ -12,7 +12,7 @@
 library("knitr")
 opts_chunk$set(tidy=FALSE,dev="png",fig.show="hide",
                fig.width=4,fig.height=4.5,
-               message=FALSE,eval=FALSE)
+               message=FALSE,eval=TRUE)
 @ 
 
 <<style, eval=TRUE, echo=FALSE, results="asis">>=
@@ -25,6 +25,7 @@ BiocStyle::latex()
 \author{Mark Dunning}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \begin{document}
+
 
 \maketitle
 \tableofcontents
@@ -299,7 +300,7 @@ exo4 <- exo[names(exo) %in% chr4ID]
 length(exo4)
 @
 
-\bioccomment{If you cannot find a TranscriptDb package that provides the annotation you need, you can use the \Rfunction{makeTxDbPackage} function to create one from a UCSC browser, biomaRt or another source. See the help page for more details.}
+\bioccomment{If you cannot find a TranscriptDb package that provides the annotation you need, you can use the \Rfunction{makeTxDbPackage} function to create one from the UCSC browser, biomaRt or another source. See the help page for more details.}
 
 
 \usecase
@@ -467,7 +468,7 @@ Store the adjusted p-values and log fold-change in the ranges object
 <<>>=
 
 mcols(sigRanges)$padj = myInfo$PValue
-mcols(sigRanges)$padjlogfc = myInfo$logFC
+mcols(sigRanges)$logfc = myInfo$logFC
 sigRanges
 @
 
