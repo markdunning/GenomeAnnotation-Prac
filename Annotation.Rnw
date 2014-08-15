@@ -12,7 +12,7 @@
 library("knitr")
 opts_chunk$set(tidy=FALSE,dev="png",fig.show="hide",
                fig.width=4,fig.height=4.5,
-               message=FALSE,eval=TRUE)
+               message=FALSE,eval=FALSE)
 @ 
 
 <<style, eval=TRUE, echo=FALSE, results="asis">>=
@@ -383,67 +383,6 @@ gffOverlap <- summarizeOverlaps(gffRange , bam)
 %%head(repeats)
 %%@
 
-\subsection{Annotating a set of genomic variants}
-
-If given a set of genomic variants (i.e. single-nucleotide variants or indels), it is a common task to see where each variant is located with respect to a gene and what effect, if any, they have on coding. Most variant-calling tools produce output in \textit{vcf} format, which emerged as a standard file format from the 1000 genomes project. The \Biocpkg{VariantAnnotation} package provides infrastrucure for reading and manipulating variant calls in this format.
-
-As an example, we will use variants that were called on chromosome 22 using 'samtools' for three Hapmap individuals. The vcf file can be found in the {\tt exampleData} folder.
-<<>>=
-library(VariantAnnotation)
-myvcf <- readVcf("exampleData//chr22.flt.vcf","hg19")
-myvcf
-@
-\bioccomment{We have to specify a 'genome' version when we read the file in}
-
-\fixme{Exploring the contents of the vcf file}
-<<>>=
-
-
-@
-
-It is a common
-
-<<>>=
-library(SNPlocs.Hsapiens.dbSNP.20101109)
- rd <- rowData(myvcf)
-
-ch22snps <- getSNPlocs("ch22")
-
-ch22snpGR <- GRanges(22, IRanges(start=ch22snps$loc,width=1),names=ch22snps$RefSNP_id)
-
-olapPos = findOverlaps(rowData(myvcf),ch22snpGR)
-
-
-knownStatus <- rep("novel", length(rd))
-knownStatus[queryHits(olapPos)] <- "known"
-
-novelHits <- myvcf[queryHits(olapPos)]
-@
-
-
-
-<<>>=
- library(TxDb.Hsapiens.UCSC.hg19.knownGene)
- txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene
-
-  novelHits <- renameSeqlevels(novelHits, c("22" = "chr22"))
-
-  rd <- rowData(novelHits)
-
-
- loc <- locateVariants(rd, txdb, CodingVariants())
- head(loc, 3)
-
-@
-
-<<>>=
-library(BSgenome.Hsapiens.UCSC.hg19)
- coding <- predictCoding(novelHits, txdb, seqSource=Hsapiens)
-
-coding[1:10]
-table(mcols(coding)$CONSEQUENCE)
-
-@
 
 
 \section{Visualisation}
@@ -597,6 +536,113 @@ start <- min(start(bamSubset))
 end <- max(end(bamSubset))
 id <- plotIdeogram(genome = "dm3", subchr = "chr4", zoom.region = c(start,end))
 tracks(id, p1, p2)
+@
+
+
+\section{Annotating a set of genomic variants}
+
+If given a set of genomic variants (i.e. single-nucleotide variants or indels), it is a common task to see where each variant is located with respect to a gene and what effect, if any, they have on coding. 
+
+
+Most variant-calling tools produce output in \textit{vcf} format, which emerged as a standard file format from the 1000 genomes project. The \Biocpkg{VariantAnnotation} package provides infrastrucure for reading and manipulating variant calls in this format.
+
+As an example, we will use variants that were called on chromosome 22 using 'samtools' for three Hapmap individuals. The resulting vcf file can be found in the {\tt exampleData} folder.
+
+\usecase
+Read the example {\tt vcf} file using \Biocpkg{VariantAnnotation}
+
+<<>>=
+library(VariantAnnotation)
+myvcf <- readVcf("exampleData//chr22.flt.vcf","hg19")
+myvcf
+@
+\bioccomment{We have to specify a 'genome' version when we read the file in. As yet this doesn't have any impact on the analysis, so we can really specify any value we like}
+
+\subsection{Exploring the vcf data}
+
+The structure is the \Robject{myvcf} object is complex, but you should be able to determine the number of SNPs and samples. We can extract data using a series of extractor functions.
+
+\fixme{Exploring the contents of the vcf file}
+<<>>=
+
+
+@
+
+'info' contains data that is specific to each SNP and can be retrived using the \Rfunction{info} function. The fields to be found here are often useful for quality control and filtering. For instance, we would expect bases with more reads covering them to yield more-confident SNPs. How to define such filters is beyond the scope of what we cover here, and such filters may be application or tool-specific. As a basic rule-of-thumb we want to exclude calls at low depth.
+
+\usecase
+Get descriptions for the info values and plot histograms of the depth and mapping quality of each SNP. Create a new object to contain only variants that are covered at depth more than 10.
+
+<<>>=
+
+info(header(myvcf))
+hist(info(myvcf)[["DP"]])
+hist(info(myvcf)[["MQ"]])
+lowDepthVars <- which(info(myvcf)[["DP"]] < 10)
+
+myvcf <- myvcf[-lowDepthVars]
+
+@
+
+Information that is sample-specific is retrieved using the \Rfunction{geno} function. Here we get a data frame returned, with one row for each variant, and one column for each sample. 
+
+\usecase
+What per-sample information is available? How many calls are shared between the three samples?
+
+<<>>=
+geno(header(myvcf))
+
+gt <- geno(myvcf)[["GT"]]
+sum(gt[,1] == gt[,2])
+sum(gt[,2] == gt[,3])
+sum(gt[,1] == gt[,3])
+
+@
+
+
+\subsection{Checking for novelty}
+
+<<>>=
+library(SNPlocs.Hsapiens.dbSNP.20101109)
+ rd <- rowData(myvcf)
+
+ch22snps <- getSNPlocs("ch22",as.GRanges = TRUE)
+ch22snps <- renameSeqlevels(ch22snps, c("ch22" = "22"))
+
+olapPos = findOverlaps(rowData(myvcf),ch22snps)
+
+knownStatus <- rep("novel", length(rd))
+knownStatus[queryHits(olapPos)] <- "known"
+
+novelHits <- myvcf[queryHits(olapPos)]
+@
+
+
+\subsection{Annotating to genes}
+Since the variant locations can be translated to GenomicRanges, it is relatively trivial to determine the
+
+<<>>=
+ library(TxDb.Hsapiens.UCSC.hg19.knownGene)
+txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene
+
+novelHits <- renameSeqlevels(novelHits, c("22" = "chr22"))
+rd <- rowData(novelHits)
+
+
+ loc <- locateVariants(rd, txdb, CodingVariants())
+ head(loc, 3)
+
+@
+
+\subsection{Predicting consequence}
+
+<<>>=
+library(BSgenome.Hsapiens.UCSC.hg19)
+ coding <- predictCoding(novelHits, txdb, seqSource=Hsapiens)
+
+coding[1:10]
+table(mcols(coding)$CONSEQUENCE)
+
 @
 
 
