@@ -157,7 +157,8 @@ The resulting table, \Robject{annotatedHits}, can now be used to ease the interp
 As an alternative to \Biocpkg{biomaRt}, we can use the variety of pre-built databases that are available as Bioconductor packages. The main advantage of this approach is that we do not require an internet connection to perform the annotation, once the package is installed. A full list of annotation packages is available on the Bioconductor \href{http://tinyurl.com/l7hsus5}{{\color{blue}website}}.
 
 \subsection{Genome sequences}
-For instance, we can obtain pre-built and easily accessible packages to interrogate genome sequences. Such packages take advantage of the \Biocpkg{Biostrings} infrastructure that you will have already seen. 
+For instance, we can obtain pre-built and easily accessible packages to interrogate genome sequences. Such packages take advantage of the \Biocpkg{Biostrings} infrastructure that you will have already seen, and employ a database scheme under-the-hood. Thus, making queries is extremely efficient. 
+
 \usecase
 Load the package that provides the genome representation for Drosophila
 <<>>=
@@ -170,7 +171,8 @@ Dmelanogaster
 We can retrieve the sequence for a particular chromosome by subsetting using the {\tt [[} operator and providing the name of a chromosome.
 
 \usecase
-Retrieve the sequence for chromosome X by subsetting. Then create a plot to show the lengths of all chromosomes.\bioccomment{You can use the length once you have retrieved each chromosome sequence}.
+Retrieve the sequence for chromosome X by subsetting. Then create a plot to show the lengths of all chromosomes.
+\bioccomment{You can use the length once you have retrieved each chromosome sequence}.
 
 <<>>=
 names(Dmelanogaster)
@@ -182,7 +184,7 @@ barplot(chrLen, horiz=TRUE,las=2)
 Biostrings genomes have also been designed to inter-operate with the GenomicRanges functions and classes. A useful consequence is that you can access the genomic sequence for a particular gene by translating the coordinates of the gene into a \Robject{GRanges} object.
 
 \usecase
-Use \Biocpkg{biomaRt} to get the coordinates of the fly gene FBgn0040357 on Chromosome X. Translate this into a \Robject{GRanges} object and retreive the genomic sequence.
+Use \Biocpkg{biomaRt} to get the coordinates of the fly gene FBgn0040357 on Chromosome X. Translate this into a \Robject{GRanges} object and retrieve the genomic sequence for this gene.
 
 <<>>=
 geneInfo <- getBM(attributes = c("chromosome_name", "start_position", "end_position"),
@@ -196,7 +198,7 @@ seq
 We can, of course, specify ranges for mutliple genes in the same \Robject{GRanges} object. They can also be manipulated, expanded, collapsed, etc using any of the operations we saw yesterday.
 
 \usecase
-Create a \Robject{GRanges} object to represent the top genes from the RNA-seq analysis. Find the genomic sequencesof each of these genes, and also the sequences 50 bases upstream.
+Create a \Robject{GRanges} object to represent the top genes from the RNA-seq analysis. Find the genomic sequences of each of these genes, and also the sequences 50 bases upstream.
 
 <<>>=
 gr2 <- GRanges(paste0("chr",annotatedHits$chromosome_name), 
@@ -332,7 +334,7 @@ olapGenes <- summarizeOverlaps(exo4, bam)
 countGenes <- assays(olapGenes)$counts
 countGenes
 @
-The count vector has entries for each gene on chromosome 4. If we wanted counts for all exons, then we would have to supply a slightly different argument to the function with
+The count vector has entries for each gene on chromosome 4. If we wanted counts for all exons, then we would have to supply a slightly different argument to the function, by collapsing the list structure of the exons object.
 
 \usecase
 Obtain per-exon counts for each gene
@@ -391,7 +393,7 @@ gffOverlap <- summarizeOverlaps(gffRange , bam)
 It is also possible to save the results of a Bioconductor analysis in a browser to enable interactive analysis and integration with other data types, or sharing with collaborators. We shall use the bed format for illustration.
 
 \usecase
-Select all significant genes from the pasilla analysis and annotate their genome location. Create a \Rclass{GRanges} representation of the locations.
+Select all significant genes from the pasilla analysis (lets use a p-value of 0.1) and annotate their genome location. Create a \Rclass{GRanges} representation of the locations.
 
 <<>>=
 sigResults <- pasillaRes[which(pasillaRes$PValue< 0.1), ]
@@ -410,7 +412,7 @@ names = myInfo[, 1]))
 
 @
 
-Rather than just representing the genomic locations, the .bed format is also able to colour each range according to some property of the analysis (e.g. direction and magnitude of change) to help highlight particular regions of interest. A score can also be displayed when a particular region is clicked-on. A useful propery of \Robject{GenomicRanges} is that we can attach metadata to each range.
+Rather than just representing the genomic locations, the .bed format is also able to colour each range according to some property of the analysis (e.g. direction and magnitude of change) to help highlight particular regions of interest. A score can also be displayed when a particular region is clicked-on. A useful propery of \Robject{GenomicRanges} is that we can attach metadata to each range using the \Rfunction{mcols} function. 
 
 \usecase
 Store the adjusted p-values and log fold-change in the ranges object
@@ -424,7 +426,8 @@ sigRanges
 
 
 \usecase
-Create a score from the p-values and colour scheme based on the fold-change.
+Create a score from the p-values and colour scheme based on the fold-change. For convenience, restrict the fold changes to be within the region -3 to 3.
+
 <<>>=
 Score <- -log10(sigRanges$padj)
 rbPal <-colorRampPalette(c("red", "blue"))
@@ -435,10 +438,12 @@ logfc <-  pmin(logfc , 3)
 Col <- rbPal(10)[as.numeric(cut(logfc, breaks = 10))]
 @
 
+
+
 The colours and score can be saved in the \Rclass{GRanges} object and \Rcode{score} and \Rcode{itemRgb} columns respectively and will be used to construct the track when the export is called.
 
 \usecase
-Export the signifcant results from the DE analysis as a \textit{.bed} track.
+Export the signifcant results from the DE analysis as a \textit{.bed} track. You can load the resulting file in IGV, if you wish.
 
 <<>>=
 mcols(sigRanges)$score <- Score
@@ -450,7 +455,7 @@ export(sigRanges , con = "topHits.bed")
 
 The export of other formats such as \textit{gff}, \textit{bedGraph}, \textit{wig} and \textit{bigwig} is also possible with \Biocpkg{rtracklayer}. We can also call the UCSC browser directly to display the tracks. See the \Biocpkg{rtracklayer} vignette for details.
 
-\fixme{Add IGV example?}
+
 
 \subsection{ggbio}
 We will now take a brief look at one of the visualisation packages in Bioconductor that takes advantages of the GenomicRanges and GenomicFeatures object-types.
@@ -476,7 +481,7 @@ autoplot(sigRanges[seqnames(sigRanges) == "chrX"])
 autoplot(sigRanges , layout = "karyogram")
 
 @
-The Manhattan plot is a common way of visualising genome-wide results, and this is implemented as the \Rfunction{plotGrandLinear} function. We have to supply a value to display on the y-axis. This is done by using the \Rfunction{aes} function, which is inherited from \Rpackage{ggplot2}.
+The \textit{Manhattan} plot is a common way of visualising genome-wide results, and this is implemented as the \Rfunction{plotGrandLinear} function. We have to supply a value to display on the y-axis. This is done by using the \Rfunction{aes} function, which is inherited from \Rpackage{ggplot2}.
 
 \usecase
 Plot the genomic locations of the significant genes on a linear scale. Modify the colour scheme to show whether each gene is up- or down-regulated
@@ -496,6 +501,8 @@ Find the gene which has the most exon counts in the pasilla bam. Plot the strutu
 myGene <- names(exonRanges)[which.max(countExons)]
 autoplot(tx, which = exo4[[myGene]])
 @
+
+We can even plot the location of sequencing reads if they have been imported using \Rfunction{readGAlignments} function (or similar).
 
 \usecase
 Plot the number of reads in this region surrounding the gene.
@@ -538,7 +545,6 @@ id <- plotIdeogram(genome = "dm3", subchr = "chr4", zoom.region = c(start,end))
 tracks(id, p1, p2)
 @
 
-
 \section{Annotating a set of genomic variants}
 
 If given a set of genomic variants (i.e. single-nucleotide variants or indels), it is a common task to see where each variant is located with respect to a gene and what effect, if any, they have on coding. 
@@ -562,16 +568,11 @@ myvcf
 
 The structure is the \Robject{myvcf} object is complex, but you should be able to determine the number of SNPs and samples. We can extract data using a series of extractor functions.
 
-\fixme{Exploring the contents of the vcf file}
-<<>>=
 
-
-@
-
-'info' contains data that is specific to each SNP and can be retrived using the \Rfunction{info} function. The fields to be found here are often useful for quality control and filtering. For instance, we would expect bases with more reads covering them to yield more-confident SNPs. How to define such filters is beyond the scope of what we cover here, and such filters may be application or tool-specific. As a basic rule-of-thumb we want to exclude calls at low depth.
+'info' contains data that is specific to each SNP and can be retrived using the \Rfunction{info} function. The fields to be found here are often useful for quality control and filtering. For instance, we would expect bases with more reads covering them to yield more-confident SNPs. How to define such filters is beyond the scope of what we cover here, and such filters may be application or tool-specific. However, as a basic rule-of-thumb we want to exclude calls at low depth.
 
 \usecase
-Get descriptions for the info values and plot histograms of the depth and mapping quality of each SNP. Create a new object to contain only variants that are covered at depth more than 10.
+Get descriptions for the info values and plot histograms of the depth and mapping quality of each SNP. Create a new object to contain only variants that are covered at depth more than 10. How many variants remain?
 
 <<>>=
 
@@ -581,7 +582,7 @@ hist(info(myvcf)[["MQ"]])
 lowDepthVars <- which(info(myvcf)[["DP"]] < 10)
 
 myvcf <- myvcf[-lowDepthVars]
-
+myvcf
 @
 
 Information that is sample-specific is retrieved using the \Rfunction{geno} function. Here we get a data frame returned, with one row for each variant, and one column for each sample. 
@@ -599,8 +600,12 @@ sum(gt[,1] == gt[,3])
 
 @
 
+We are still left with a long list of variants. In some studies, we might want to refine our list so that it contains only 'novel' findings that we can follow-up. One resource useful for this task is the various versions of \textit{dbSNP}
 
 \subsection{Checking for novelty}
+
+\usecase Load the \Biocannopkg{SNPlocs.Hsapiens.dbSNP.20101109} package and retrieve the locations of common snps on chromosome 22. Find which of variants overlap with these SNPs, and remove them.
+
 
 <<>>=
 library(SNPlocs.Hsapiens.dbSNP.20101109)
@@ -613,14 +618,18 @@ olapPos = findOverlaps(rowData(myvcf),ch22snps)
 
 knownStatus <- rep("novel", length(rd))
 knownStatus[queryHits(olapPos)] <- "known"
+table(knownStatus)
 
-novelHits <- myvcf[queryHits(olapPos)]
+novelHits <- myvcf[knownStatus == "novel"]
 @
 
+\bioccomment{Notice that we have to rename the chromosomes of our variants so that they are consistent}
 
 \subsection{Annotating to genes}
-Since the variant locations can be translated to GenomicRanges, it is relatively trivial to determine the
+Since the variant locations can be translated to GenomicRanges, it is relatively trivial to determine which ones are locating within genes, and thus have the potential to disrupt protein-coding. We have already seen how to use transcript database to retrieve coding sequences. However, since it is such a common use-case, a useful \Rfunction{codingVariants} function has been provided in \Biocpkg{VariantAnnotation} to assist in the task
 
+\usecase 
+Use \Rfunction{locateVariants} to determine which of the novel variants are within coding regions
 <<>>=
  library(TxDb.Hsapiens.UCSC.hg19.knownGene)
 txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene
@@ -634,8 +643,16 @@ rd <- rowData(novelHits)
 
 @
 
+
+
+\bioccomment{Other types of variant overlap are supported by \Rfunction{locateVariants}. For example, we can see which of our variants fall within introns, splice sites or promoters. As usual, we can read about them on the help page for the function.}
+
 \subsection{Predicting consequence}
 
+Given the variant locations and genome sequence, we can quantify what effect each will have on coding.
+
+\usecase
+Determine the amino acids changes that arise from the variants we have detected.
 <<>>=
 library(BSgenome.Hsapiens.UCSC.hg19)
  coding <- predictCoding(novelHits, txdb, seqSource=Hsapiens)
@@ -645,6 +662,36 @@ table(mcols(coding)$CONSEQUENCE)
 
 @
 
+\bioccomment{A useful column here is QueryID, which can be used to select rows (variants) from the vcf file}
 
+The structure used to store variants is recognised by \Biocpkg{ggbio}, which allows variant calls to be displayed alongside transcript and other genomic data. Here is example code to plot the location of our coding variants with respect to the relevant gene. Firstly, we create a set of exon locations from the human genome transcript database. It is then a matter of creating a \Robject{GRanges} object corresponding to the gene of interest. We can supply these locations to \Rfunction{autoplot}, and \Biocpkg{ggbio} will work out how to do the plot.
+
+
+<<>>=
+hgExons <- exonsBy(txdb, "gene")
+
+codingvars <- novelHits[coding$QUERYID]
+
+affectedGenes <- na.omit(unique(coding$GENEID))
+
+
+gr <- hgExons[[affectedGenes[1]]]
+
+t1 <- autoplot(txdb, which = gr)
+t2<- autoplot(codingvars, which = gr,geom="rect")
+tracks(t1, t2)
+
+@
+
+If we wish to view the variants in an external tool, we can export the locations as a bed file using functionality from the \Biocpkg{rtracklayer} package. \Biocpkg{VariantAnnotation} is also able to write a vcf file.
+
+\usecase 
+
+Export the locations of coding variants as a \textit{.bed} file and export the vcf data relating to these variants as a new vcf file.
+
+<<>>=
+export(rowData(codingvars),file="codingVariants.bed")
+writeVcf(codingvars,filename = "codingVariants.vcf")
+@
 
 \end{document}
