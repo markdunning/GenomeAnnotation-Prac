@@ -523,7 +523,7 @@ autoplot(bamSubset , stat = "coverage")
 The plots produced by \Biocpkg{ggbio} (and indeed \Rpackage{ggplot2} on which the package is based) are not in standard R graphics format, so techniques like \Rcode{par(mfrow)} for arranging plots on the same page are not applicable. However, \Biocpkg{ggbio} allows the plots to be saved as objects, which can later be arranged by specialist functions such as \Rfunction{tracks}. This function automatically aligns the x-axis of each plot to be on the same scale.
 
 \usecase
-Make a combined plot of the sample information and transcripts
+Make a combined plot of the aligned reads and transcripts for the selected gene.
 
 <<>>=
 p1 <- autoplot(tx, which = myreg)
@@ -566,10 +566,10 @@ myvcf
 
 \subsection{Exploring the vcf data}
 
-The structure is the \Robject{myvcf} object is complex, but you should be able to determine the number of SNPs and samples. We can extract data using a series of extractor functions.
+The structure of the \Robject{myvcf} object is complex, but you should be able to determine the number of SNPs and samples. We can extract data using a series of extractor functions.
 
 
-'info' contains data that is specific to each SNP and can be retrived using the \Rfunction{info} function. The fields to be found here are often useful for quality control and filtering. For instance, we would expect bases with more reads covering them to yield more-confident SNPs. How to define such filters is beyond the scope of what we cover here, and such filters may be application or tool-specific. However, as a basic rule-of-thumb we want to exclude calls at low depth.
+'info' contains data that are specific to each SNP and can be retrived using the \Rfunction{info} function. The fields to be found here are often useful for quality control and filtering. For instance, we would expect bases with more reads covering them to yield more-confident SNPs. How to define such filters is beyond the scope of what we cover here, and such filters may be application or tool-specific. However, as a basic rule-of-thumb we want to exclude calls at low depth.
 
 \usecase
 Get descriptions for the info values and plot histograms of the depth and mapping quality of each SNP. Create a new object to contain only variants that are covered at depth more than 10. How many variants remain?
@@ -623,13 +623,14 @@ table(knownStatus)
 novelHits <- myvcf[knownStatus == "novel"]
 @
 
-\bioccomment{Notice that we have to rename the chromosomes of our variants so that they are consistent}
+\bioccomment{Notice that we have to rename the chromosomes of the dbSNP locations our variants so that they are consistent with our set of variants.}
 
 \subsection{Annotating to genes}
-Since the variant locations can be translated to GenomicRanges, it is relatively trivial to determine which ones are locating within genes, and thus have the potential to disrupt protein-coding. We have already seen how to use transcript database to retrieve coding sequences. However, since it is such a common use-case, a useful \Rfunction{codingVariants} function has been provided in \Biocpkg{VariantAnnotation} to assist in the task
+Since the variant locations can be translated to GenomicRanges using the \Rfunction{rowData} function, it is relatively trivial to determine which ones are locating within genes, and thus have the potential to disrupt protein-coding. We have already seen how to use transcript database packages to retrieve coding sequences. However, since it is such a common use-case, a useful \Rfunction{codingVariants} function has been provided in \Biocpkg{VariantAnnotation} to assist in the task
 
 \usecase 
-Use \Rfunction{locateVariants} to determine which of the novel variants are within coding regions
+Use \Rfunction{locateVariants} to determine which of the novel variants are within coding regions. Again, make sure that the chromosome names are consistent between the two sets of ranges.
+
 <<>>=
  library(TxDb.Hsapiens.UCSC.hg19.knownGene)
 txdb <- TxDb.Hsapiens.UCSC.hg19.knownGene
@@ -664,7 +665,7 @@ table(mcols(coding)$CONSEQUENCE)
 
 \bioccomment{A useful column here is QueryID, which can be used to select rows (variants) from the vcf file}
 
-The structure used to store variants is recognised by \Biocpkg{ggbio}, which allows variant calls to be displayed alongside transcript and other genomic data. Here is example code to plot the location of our coding variants with respect to the relevant gene. Firstly, we create a set of exon locations from the human genome transcript database. It is then a matter of creating a \Robject{GRanges} object corresponding to the gene of interest. We can supply these locations to \Rfunction{autoplot}, and \Biocpkg{ggbio} will work out how to do the plot.
+The structure used to store variants is recognised by \Biocpkg{ggbio}, which allows variant calls to be displayed alongside transcript and other genomic data. Here is example code to plot the location of our coding variants with respect to the relevant gene. Firstly, we create a set of exon locations from the human genome transcript database and a reduced vcf file containing just the coding variants. It is then a matter of creating a \Robject{GRanges} object corresponding to the gene of interest. We can supply these locations to \Rfunction{autoplot}, and \Biocpkg{ggbio} will work out how to do the plot.
 
 
 <<>>=
