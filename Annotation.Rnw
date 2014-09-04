@@ -691,7 +691,7 @@ If we wish to view the variants in an external tool, we can export the locations
 Export the locations of coding variants as a \textit{.bed} file and export the vcf data relating to these variants as a new vcf file.
 
 <<>>=
-export(rowData(codingvars),file="codingVariants.bed")
+export(rowData(codingvars),con="codingVariants.bed")
 writeVcf(codingvars,filename = "codingVariants.vcf")
 @
 
