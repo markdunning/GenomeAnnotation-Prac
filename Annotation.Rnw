@@ -23,8 +23,12 @@ BiocStyle::latex()
 \title{Annotation and Visualisation of sequencing data in Bioconductor}
 
 \author{Mark Dunning}
+\date{Last modified: \today}
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \begin{document}
+
+
 
 
 \maketitle
@@ -86,6 +90,7 @@ The \Robject{topHits} data frame provides us with a list of genes that are found
 \section{Annotation using an online resource}
 The \Biocpkg{biomaRt} package provides an interface to the \href{www.biomart.org}{{\color{blue}biomart}} website; allowing the data to be accessed in a consistent manner and without having write complex SQL queries or understand the underlying schema. The databases available through BioMart can be obtained with the \Rfunction{listMarts} function
 
+
 \subsection{General BiomaRt Usage}
 
 \usecase
@@ -98,6 +103,14 @@ ensembl <- useMart("ensembl", dataset ="dmelanogaster_gene_ensembl")
 attr <- listAttributes(ensembl)
 head(attr, 10)
 @
+
+\warning{biomaRt will automatically connect to the latest annotation version. If you are unsure what this version is, you can use the following code to access this information}
+
+<<>>=
+datasets <- listDatasets(ensembl)
+datasets[which(datasets[,1] == "dmelanogaster_gene_ensembl"),]
+@
+
 
 The function \Rfunction{getBM} is used to build-up queries in biomart. We must specify one or more attributes that we want to retreive. If no values or filters are specified, then all values will be returned.
 
@@ -136,11 +149,11 @@ getBM(attributes = "ensembl_gene_id", filters = c("chromosome_name",
 We can use \Biocpkg{biomaRt} to annotate the results of our RNA-seq analysis. Firstly, we have to recognise that the row names of the \Robject{topHits} data frame are Ensembl IDs. Then it is a matter of deciding what attributes we want to retrieve from the database.
 
 \usecase
-Annotate the top hits from the DEseq analysis with their genomic locations and external IDs and create a merged table containing both DESeq results and the annotations.
+Annotate the top hits from the DEseq analysis with their genomic locations and external names and create a merged table containing both DESeq results and the annotations.
 
 <<>>=
 myInfo <- getBM(attributes = c("flybase_gene_id", "chromosome_name", 
-"band", "start_position", "end_position", "external_gene_id"), 
+"band", "start_position", "end_position", "external_gene_name"), 
 filters = "ensembl_gene_id", values = rownames(topHits), mart = ensembl)
 
 myInfo
@@ -160,25 +173,26 @@ As an alternative to \Biocpkg{biomaRt}, we can use the variety of pre-built data
 For instance, we can obtain pre-built and easily accessible packages to interrogate genome sequences. Such packages take advantage of the \Biocpkg{Biostrings} infrastructure that you will have already seen, and employ a database scheme under-the-hood. Thus, making queries is extremely efficient. 
 
 \usecase
-Load the package that provides the genome representation for Drosophila
+Load the package that provides the latest genome representation for Drosophila ('dm6')
 <<>>=
 library(BSgenome)
 available.genomes()
-library(BSgenome.Dmelanogaster.UCSC.dm3)
+library(BSgenome.Dmelanogaster.UCSC.dm6)
 Dmelanogaster
 @
 
 We can retrieve the sequence for a particular chromosome by subsetting using the {\tt [[} operator and providing the name of a chromosome.
 
 \usecase
-Retrieve the sequence for chromosome X by subsetting. Then create a plot to show the lengths of all chromosomes.
+Retrieve the sequence for chromosome X by subsetting. Then create a plot to show the lengths of all chromosomes. Restrict the plot to chromosomes over 2,000,000 bases only.
+
 \bioccomment{You can use the length once you have retrieved each chromosome sequence}.
 
 <<>>=
 names(Dmelanogaster)
 Dmelanogaster[["chrX"]]
 chrLen <- sapply(names(Dmelanogaster), function(x) length(Dmelanogaster[[x]]))
-barplot(chrLen, horiz=TRUE,las=2)
+barplot(chrLen[which(chrLen > 2000000)], horiz=TRUE,las=2)
 @
 
 Biostrings genomes have also been designed to inter-operate with the GenomicRanges functions and classes. A useful consequence is that you can access the genomic sequence for a particular gene by translating the coordinates of the gene into a \Robject{GRanges} object.
@@ -282,6 +296,8 @@ chr4ID <- chr4Genes[, 2]
 \subsection{Transcript packages}
 
 Bioconductor provide a number of pre-built packages that have a database of all transcript information for a particular organism. The package we are going to use is \Biocannopkg{TxDb.Dmelanogaster.UCSC.dm3.ensGene}. A full list of available transcript packages is available on the Bioconductor \href{http://tinyurl.com/l7hsus5}{{\color{blue}website}}. Look for the packages that start with {\tt TxDb.}.
+
+\bioccomment{At present, there is no transcript database package relating to the dm6 genome, so we will use dm3 instead.}
 
 As its name suggests, \Biocannopkg{TxDb.Dmelanogaster.UCSC.dm3.ensGene} was built from the UCSC tables for the dm3 genome and uses Ensembl genes as an identifier. Convenient functions exist that can return the gene structure as a \Rclass{GRanges} object. One such function is \Rfunction{exonsBy} which returns a list of \Robject{GRanges} objects, each item in the list pertaining to a particular gene. Thus, the output of \Rfunction{exonsBy} can be subset in the usual manner ({\tt '[[}').
 
@@ -399,7 +415,7 @@ Select all significant genes from the pasilla analysis (lets use a p-value of 0.
 sigResults <- pasillaRes[which(pasillaRes$PValue< 0.1), ]
 
 myInfo <- getBM(attributes = c("flybase_gene_id", "chromosome_name",
-"band", "start_position", "end_position", "external_gene_id"),
+"band", "start_position", "end_position", "external_gene_name"),
 filters = "flybase_gene_id", values = rownames(sigResults), mart = ensembl) 
 
 
@@ -531,19 +547,19 @@ p2 <- autoplot(bamSubset, stat = "coverage")
 tracks(p1, p2)
 @
 
-The combined plot can also be embellished by adding an Ideogram to show the location of the region being plotted in relation to the chromosome.
+%%The combined plot can also be embellished by adding an Ideogram to show the location of the region being plotted in relation to the chromosome.
 
-\usecase
-Get the ideogram data for the drosophilla genome and add to the plot
+%%\usecase
+%%Get the ideogram data for the drosophilla genome and add to the plot
 
-<<eval=FALSE>>=
-plotIdeogram(genome = "dm3")
-plotIdeogram(genome = "dm3", subchr = "chr4")
-start <- min(start(bamSubset))
-end <- max(end(bamSubset))
-id <- plotIdeogram(genome = "dm3", subchr = "chr4", zoom.region = c(start,end))
-tracks(id, p1, p2)
-@
+%%<<eval=FALSE>>=
+%%plotIdeogram(genome = "dm3")
+%%plotIdeogram(genome = "dm3", subchr = "chr4")
+%%start <- min(start(bamSubset))
+%%end <- max(end(bamSubset))
+%%id <- plotIdeogram(genome = "dm3", subchr = "chr4", zoom.region = c(start,end))
+%%tracks(id, p1, p2)
+%%@
 
 \section{Annotating a set of genomic variants}
 
