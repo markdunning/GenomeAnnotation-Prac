@@ -1,0 +1,501 @@
+%\VignetteIndexEntry{Genomic Annotation Practical}
+%\VignettePackage{GeneticsHTSCourse}
+%\VignetteEngine{knitr::knitr}
+
+% To compile this document
+% library('knitr'); rm(list=ls()); knit('DESeq2.Rnw')
+
+\documentclass[12pt]{article}
+\newcommand{\usecase}{\textit{\textbf{Use Case: }}}
+
+<<knitr, echo=FALSE, results="hide">>=
+library("knitr")
+opts_chunk$set(tidy=FALSE,dev="png",fig.show="hide",
+               fig.width=4,fig.height=4.5,
+               message=FALSE,eval=FALSE)
+@ 
+
+<<style, eval=TRUE, echo=FALSE, results="asis">>=
+BiocStyle::latex()
+@
+
+
+\title{Annotation and Visualisation of sequencing data in Bioconductor}
+
+\author{Mark Dunning}
+\date{Last modified: \today}
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\begin{document}
+
+
+
+
+\maketitle
+\tableofcontents
+
+\usecase
+Read the results of the edgeR analysis
+
+<<>>=
+edgeRresults <- read.delim("Day3//edgeR-results.txt")
+head(edgeRresults)
+topHits <- edgeRresults[1:100,]
+@
+
+The \Robject{topHits} data frame provides us with a list of genes that are found to be \textit{statistically significant}. However, it is a separate investigation to determine if the genes are \textit{Biologically significant}. We will \textit{annotate} our list of differentially expressed genes using the online resource biomart.
+
+\section{Annotation using an online resource}
+The \Biocpkg{biomaRt} package provides an interface to the \href{www.biomart.org}{{\color{blue}biomart}} website; allowing the data to be accessed in a consistent manner and without having write complex SQL queries or understand the underlying schema. The databases available through BioMart can be obtained with the \Rfunction{listMarts} function
+
+
+\subsection{General BiomaRt Usage}
+
+\usecase
+Connect to the default version of Ensembl through BiomaRt. What vesrion of the human genome does it provide?
+
+<<>>=
+library(biomaRt)
+listMarts()
+
+ensemblLatest <- useMart("ensembl")
+
+datasets <- listDatasets(ensemblLatest)
+datasets[which(datasets[,1] == "hsapiens_gene_ensembl"),]
+@
+
+Unfortunately, our RNA-seq was aligned and annotated against \texit{hg19}. Different versions of biomaRt and genome version can have different attributes and different underlying annotation. Therefore, if we annotate using a conflicting version of Ensembl our results may be misleading.
+
+\usecase Connect to the human genome in the February 2014 archive of biomaRt. Verify that hg19 is being accessed.
+
+<<>>=
+ensembl_75 = useMart(biomart="ENSEMBL_MART_ENSEMBL", host="feb2014.archive.ensembl.org", 
+                     path="/biomart/martservice", dataset="hsapiens_gene_ensembl")
+datasets <- listDatasets(ensembl_75)
+datasets[which(datasets[,1] == "hsapiens_gene_ensembl"),]
+@
+
+
+
+The function \Rfunction{getBM} is used to build-up queries in biomart. We must specify one or more attributes that we want to retreive. If no values or filters are specified, then all values will be returned.
+
+
+\subsection{Annotating the RNA-seq results}
+We can use \Biocpkg{biomaRt} to annotate the results of our RNA-seq analysis. Firstly, we have to recognise that the first column of the \Robject{topHits} data frame are Entrez IDs. Then it is a matter of deciding what attributes we want to retrieve from the database.
+
+\usecase What is the name of the filter for Entrez gene ID?
+
+\bioccomment{We can search for particular text in the data frame of attributes using \Rfunction{grep}, \Rfunction{match} etc}
+<<>>=
+flt <- listFilters(ensembl_75)
+head(flt)
+flt[grep("entrez",flt[,1]),]
+@
+
+
+\usecase What are the attribure names for HGNC symbol, chromosome name and description?
+
+<<>>=
+attr <- listAttributes(ensembl_75)
+attr[1:50,]
+attr[grep("symbol",attr[,1]),]
+@
+
+We now have everything we need in order to make a biomaRt query. 
+
+\usecase
+Annotate the top hits from the DEseq analysis with their gene symbol,and description.
+\warning{You will need an internet connection in order for this to work}
+
+<<>>=
+extraInfo <- getBM(attributes = c("entrezgene","hgnc_symbol", "description"),
+              filters = "entrezgene", 
+              values = topHits[,1], 
+              mart = ensembl_75)
+
+head(extraInfo)
+@
+
+You may notice that the results retrieved from biomaRt may not be in the same order as the RNA-seq results that we are trying to annotate. The \Rfunction{merge} function may be useful in making sure that the rows match-up. In addition to the two data frames we are trying to merge, we also need to have a common identifier in both data frames (in our case, the Entrez ID). The \Rcode{by.x} and \Rcode{by.y} arguments are used to specify the column that this identifier can be found in.
+
+\usecase Create a merged table containing both DESeq results and the annotations.
+
+<<>>=
+annotatedHits <- merge(topHits, extraInfo, by.x = 1, by.y = 1,sort=FALSE) 
+
+head(annotatedHits)
+@
+
+
+
+The resulting table, \Robject{annotatedHits}, can now be used to ease the interpretation of the RNA-seq analysis and can be shared with collaborators.
+
+\subsection{Retrieving Gene Sequences}
+
+\usecase Retrieve the chromosome names, start and end positions and strand for the top hits. Restrict the data to just chromsomes 1 to 22 and the sex chromosomes. 
+
+<<>>=
+
+posInfo <- getBM(attributes = c("entrezgene", "chromosome_name","start_position"
+                                  ,"end_position","strand"),
+              filters = "entrezgene", 
+              values = topHits[,1], 
+              mart = ensembl_75)
+
+posInfo <- posInfo[posInfo[,2] %in% c(1:22,"X","Y"),]
+
+@
+
+You should be aware that plenty of functionality exists to manipulate and analyse intervals in the form of \Robject{GRanges} objects. You'll see that the chromosome names from biomaRt and numerical values, whereas other packages in Bioconductor expect chromosome names with the \textit{chr} prefix. Also, the strand is not given in a standard format and we need to convert these into '+' or '-' characters.
+
+\usecase Create a GenomicRanges representation of these gene coordinates
+
+\bioccomment{The \Rfunction{ifelse} function is a useful way of ....}
+
+<<>>=
+library(GenomicRanges)
+strand = ifelse(posInfo[,5] == 1, "+", "-")
+genePos <- GRanges(paste0("chr",posInfo[,2]), 
+                   IRanges(posInfo[,3],posInfo[,4],names=posInfo[,1]),strand)
+@
+
+\bioccomment{You may sometimes find the \Rfunction{with} function used in these situations. It allows the columns from a data frame to be accessed by name.}
+
+<<>>=
+genePos <- with(posInfo, GRanges(paste0("chr",chromosome_name), 
+                                 IRanges(start_position,end_position,names=entrezgene),
+                                 strand))
+@
+
+\usecase Load the package that provides genome sequence for hg19 and get the DNA sequences for the top hits. Translate the sequences into amino acids
+
+<<>>=
+library(BSgenome.Hsapiens.UCSC.hg19)
+hg19 <- BSgenome.Hsapiens.UCSC.hg19
+myseqs <- getSeq(hg19,genePos)
+myseqs
+translate(myseqs)
+@
+
+
+
+\usecase Get the sequences 100 base-pairs upstream of each gene and write these to a Fasta file
+
+<<>>=
+promSeqs <- getSeq(hg19, flank(genePos,100))
+writeXStringSet(promSeqs , file = "topGenesPromoters.fa")
+@
+
+
+
+\section{Annotation using pre-built packages}
+
+So-called organism level packages provide an alternative to \Biocpkg{biomaRt} and permit annotation queries offline. Each package is built around a central identifier (e.g. Entrez ID) and meta data surrounding the annotation sources used can be displayed once such an organism package has been installed and loaded.
+
+The terminology of {\tt columns} and {\tt keys} is equivalent to {\tt attributes} and {\tt filters} used by \Biocpkg{biomaRt}. The valid columns and keys can be interrogated using \Rfunction{columns} and \Rfunction{keytypes}. 
+
+
+\usecase Load the Human annotation package and display the metadata describing how the package was created. Find out what information can be retrieved from the package and what types of key can be used.
+
+\bioccomment{For covenience, we often assign a shorter name to the annotation package.}
+
+<<>>=
+library(org.Hs.eg.db) 
+hs <- org.Hs.eg.db
+columns(hs)
+keytypes(hs)
+@
+
+The \Rfunction{select} function is used to make the query. We have to supply a set of valid keys and columns.
+
+\usecase
+Annotate your RNA-seq results using the organism package. Choose any columns that you feel might be interesting.
+
+<<>>=
+myInfo2 <- select(hs, keytype = "ENTREZID",
+      columns =c("ENTREZID","SYMBOL") ,keys=as.character(topHits[,1]))
+
+myInfo2
+@
+
+In the analysis of thedataset, we allocated reads to genes. However, in this section we will explore the ways of counting reads that align to other genomic regions of interest. In this case we will use \textit{exons} and have to re-visit the orginal aligned reads.
+
+In order to keep the computational requirements for the analysis down file we will restrict the analysis of genes that occur on chromosome 22. We illustrate this using the \Biocannopkg{org.Hs.eg.db} organism package.
+
+\usecase
+Use the appropriate organism package to retrieve the ensembl IDs of all genes located on Human chromosome 22.
+
+<<>>=
+chr22Genes <- select(hs, columns = "ENTREZID", keytype = "CHR", keys = "22") 
+head(chr22Genes)
+chr22ID <- chr22Genes[, 2]
+@
+
+\warning{If you get the error message:\\ \Rcode{unused arguments (columns = "ENSEMBL", keytype = "CHR", keys = "4")} \\ when trying to run the \Rfunction{select}, it is because another R package has defined another function called \Rfunction{select} and over-written the function from \Rpackage{AnnotationDBI} that we intended to use. If this occurs the statement \\ \Rcode{select <- AnnotationDbi::select} \\ should allow you to run the line of code.}
+
+\subsection{Transcript packages}
+
+Bioconductor provide a number of pre-built packages that have a database of all transcript information for a particular organism. The package we are going to use is \Biocannopkg{TxDb.Hsapiens.UCSC.hg19.knownGene}. A full list of available transcript packages is available on the Bioconductor \href{http://tinyurl.com/l7hsus5}{{\color{blue}website}}. Look for the packages that start with {\tt TxDb.}.
+
+As its name suggests, \Biocannopkg{TxDb.Hsapiens.UCSC.hg19.knownGene} was built from the UCSC tables for the hg19 genome and uses Ensembl genes as an identifier. Convenient functions exist that can return the gene structure as a \Rclass{GRanges} object. One such function is \Rfunction{exonsBy} which returns a list of \Robject{GRanges} objects, each item in the list pertaining to a particular gene. Thus, the output of \Rfunction{exonsBy} can be subset in the usual manner ({\tt '[[}').
+
+\bioccomment{transcripts and cds regions can be selected in a similar fashion. See the help pages of \Rfunction{intronsBy} and \Rfunction{cdsBy}}
+
+\usecase
+Get all the exons for all genes on chromosome 4
+
+<<>>=
+library(TxDb.Hsapiens.UCSC.hg19.knownGene) 
+tx <- TxDb.Hsapiens.UCSC.hg19.knownGene
+
+exo <- exonsBy(tx, "gene")
+exo
+
+length(exo)
+exo22 <- exo[names(exo) %in% chr22ID]
+length(exo22)
+@
+
+\bioccomment{If you cannot find a TranscriptDb package that provides the annotation you need, you can use the \Rfunction{makeTxDbPackage} function to create one from the UCSC browser, biomaRt or another source. See the help page for more details.}
+
+
+\usecase
+Import the aligned reads for sample "SRR278173" using \Biocpkg{GenomicAlignments}. 
+
+<<>>=
+library(GenomicAlignments)
+bam <- readGAlignments(file="Day3//SRR278173.bam", use.name = TRUE)
+@
+We are now in a position to begin overlapping reads with exons. You should have already seen the \Rfunction{findOverlaps} function that will report the amount of ovelap between two sets of ranges. We will start simple by just doing an overlap of a single gene to make sure that we understand the output
+
+\usecase
+Use the \Rfunction{countOverlaps} function to count the number of reads covering each exon of Entrez ID "4627".
+<<>>=
+exo22 <- renameSeqlevels(exo22, value=c("chr22"="22"))
+counts <- countOverlaps(exo22[["4627"]], bam)
+counts
+@
+\Rfunction{summarizeOverlaps} extends \Rfunction{findOverlaps} by providing options to resolve reads that overlap multiple features. Each read is counted a maximum of once. Different modes of counting are available. See the help page for \Rfunction{summarizeOverlaps} for more details.
+
+\usecase
+Repeat the counting for all genes on chromosome 22
+
+<<>>=
+so <- summarizeOverlaps(exo22, bam)
+gCounts <- assays(so)$counts
+dim(gCounts)
+head(gCounts)
+@
+The count vector has entries for each gene on chromosome 22. If we wanted counts for all exons, then we would have to supply a slightly different argument to the function, by collapsing the list structure of the exons object.
+
+\usecase
+Obtain per-exon counts for each gene
+<<>>=
+perExonRanges <- unlist(exo22)
+olapExon <- summarizeOverlaps(perExonRanges , bam)
+eCounts <- assays(olapExon)$counts
+eCounts
+@
+The \Rfunction{summarizeOverlaps} function can also take the location of one or more bam files as an argument. This means that the processing of reads and counting is handled in one step. However, we have to use the special \Rfunction{BamFileList} constructor when dealing with multiple files.
+
+\usecase
+Obtain counts of chromosome 22 gene "4627" for the bam files provided.
+
+<<>>=
+fls <- paste0("Day3/",dir("Day3/",pattern=".bam"))
+names(fls) <- basename(fls)
+multiOlap <- summarizeOverlaps(exo22[["4627"]], BamFileList(fls))
+head(assays(multiOlap)$counts)
+@
+
+\subsection{Importing and annotating using custom tracks}
+Genome browser or other tracks are often distributed as files in the formats gff, bed, wig etc. The package \Biocpkg{rtracklayer} provides infrastrucutre to import files in these formats and create a \Rclass{GRanges} representation.
+
+\usecase
+Read the gff file supplied with the pasilla package and use these intervals to produce a table of overlaps.
+
+<<>>=
+library(rtracklayer)
+gffFile <- "Dmel.BDGP5.25.62.DEXSeq.chr.gff"
+gff <- paste(system.file("extdata", package = "pasilla"), gffFile,sep="/")
+read.table(gff, nrows = 10, sep = "\t") 
+gffRange <- import(gff)
+gffRange
+gffOverlap <- summarizeOverlaps(gffRange , bam) 
+@
+
+%5\usecase
+%5Find out what tracks are available for the dm3 genome. Download the RepeatMasker track.
+
+%%\warning{The \Rfunction{getTable} function below seems to take a long time to load. Please don't wait too long for it to finish}
+
+%%%<<>>=
+%%mySession <- browserSession()
+%%track.names <- trackNames(ucscTableQuery(mySession))
+%%repeats <- getTable(ucscTableQuery(mySession, track = "rmsk",
+%%table = "rmsk")) 
+%%head(repeats)
+%%@
+
+
+
+\section{Visualisation}
+
+\subsection{Exporting tracks}
+It is also possible to save the results of a Bioconductor analysis in a browser to enable interactive analysis and integration with other data types, or sharing with collaborators. We shall use the bed format for illustration.
+
+\usecase
+Select all significant genes from the pasilla analysis (lets use a p-value of 0.1) and annotate their genome location. Create a \Rclass{GRanges} representation of the locations.
+
+<<>>=
+sigResults <- pasillaRes[which(pasillaRes$PValue< 0.1), ]
+
+myInfo <- getBM(attributes = c("flybase_gene_id", "chromosome_name",
+"band", "start_position", "end_position", "external_gene_name"),
+filters = "flybase_gene_id", values = rownames(sigResults), mart = ensembl) 
+
+
+myInfo <- merge(sigResults, myInfo, by.x = 0, by.y = 1)
+
+
+sigRanges <- GRanges(paste("chr", myInfo$chromosome_name, sep = ""),
+IRanges(start = myInfo$start_position , end = myInfo$end_position ,
+names = myInfo[, 1]))
+
+@
+
+Rather than just representing the genomic locations, the .bed format is also able to colour each range according to some property of the analysis (e.g. direction and magnitude of change) to help highlight particular regions of interest. A score can also be displayed when a particular region is clicked-on. A useful propery of \Robject{GenomicRanges} is that we can attach metadata to each range using the \Rfunction{mcols} function. 
+
+\usecase
+Store the adjusted p-values and log fold-change in the ranges object
+
+<<>>=
+
+mcols(sigRanges)$padj = myInfo$PValue
+mcols(sigRanges)$logfc = myInfo$logFC
+sigRanges
+@
+
+
+\usecase
+Create a score from the p-values and colour scheme based on the fold-change. For convenience, restrict the fold changes to be within the region -3 to 3.
+
+<<>>=
+Score <- -log10(sigRanges$padj)
+rbPal <-colorRampPalette(c("red", "blue"))
+
+logfc <-  pmax(sigRanges$logfc, -3) 
+logfc <-  pmin(logfc , 3)
+
+Col <- rbPal(10)[as.numeric(cut(logfc, breaks = 10))]
+@
+
+
+
+The colours and score can be saved in the \Rclass{GRanges} object and \Rcode{score} and \Rcode{itemRgb} columns respectively and will be used to construct the track when the export is called.
+
+\usecase
+Export the signifcant results from the DE analysis as a \textit{.bed} track. You can load the resulting file in IGV, if you wish.
+
+<<>>=
+mcols(sigRanges)$score <- Score
+
+mcols(sigRanges)$itemRgb <- Col
+
+export(sigRanges , con = "topHits.bed")
+@
+
+The export of other formats such as \textit{gff}, \textit{bedGraph}, \textit{wig} and \textit{bigwig} is also possible with \Biocpkg{rtracklayer}. We can also call the UCSC browser directly to display the tracks. See the \Biocpkg{rtracklayer} vignette for details.
+
+
+
+\subsection{ggbio}
+We will now take a brief look at one of the visualisation packages in Bioconductor that takes advantages of the GenomicRanges and GenomicFeatures object-types.
+The documentation for \Biocpkg{ggbio} is very extensive and contains lots of examples.\newline
+
+{\tt http://www.tengfei.name/ggbio/docs/}
+
+Extra background reading can be found on the ggplot2 website; the package on which the principles of ggbio is based.\newline
+{\tt http://ggplot2.org/}
+
+The \Biocpkg{Gviz} package is another Bioconductor package that specialising in genomic visualisations, but we will not explore this package in the course.
+
+
+A useful function within \Biocpkg{ggbio} is \Rfunction{autoplot}, which will construct an appropriate plot based on the object-type of the input. For example, if we pass a GRanges object to the function it will plot the genomic locations on a linear scale and label chromosome and positional information on the plot. The style of the plot can be changed by the layout argument.
+
+\usecase
+Plot the locations of the significant hits from the DE analysis. Try the default, karyogram and circle layouts
+
+<<>>=
+library(ggbio)
+autoplot(sigRanges)
+autoplot(sigRanges[seqnames(sigRanges) == "chrX"])
+autoplot(sigRanges , layout = "karyogram")
+
+@
+The \textit{Manhattan} plot is a common way of visualising genome-wide results, and this is implemented as the \Rfunction{plotGrandLinear} function. We have to supply a value to display on the y-axis. This is done by using the \Rfunction{aes} function, which is inherited from \Rpackage{ggplot2}.
+
+\usecase
+Plot the genomic locations of the significant genes on a linear scale. Modify the colour scheme to show whether each gene is up- or down-regulated
+
+<<>>=
+plotGrandLinear(sigRanges , aes(y = score)) 
+mcols(sigRanges)$Up <- logfc > 0 
+plotGrandLinear(sigRanges, aes(y = score, col = Up))
+@
+
+\Biocpkg{ggbio} is also able to plot the structure of genes according to a particular model represented by a \Robject{GenomicFeatures} object.
+
+\usecase
+Find the gene which has the most exon counts in the pasilla bam. Plot the struture of this gene.
+
+<<>>=
+myGene <- names(exonRanges)[which.max(countExons)]
+autoplot(tx, which = exo4[[myGene]])
+@
+
+We can even plot the location of sequencing reads if they have been imported using \Rfunction{readGAlignments} function (or similar).
+
+\usecase
+Plot the number of reads in this region surrounding the gene.
+
+<<>>=
+myreg <- flank(reduce(exo4[[myGene]]), 500, both = T)
+bamSubset <- bam[bam %over% myreg]
+autoplot(bamSubset)
+@
+
+\usecase
+Repeat the plot, but with a smoothed coverage
+
+<<>>=
+autoplot(bamSubset , stat = "coverage")
+@
+
+The plots produced by \Biocpkg{ggbio} (and indeed \Rpackage{ggplot2} on which the package is based) are not in standard R graphics format, so techniques like \Rcode{par(mfrow)} for arranging plots on the same page are not applicable. However, \Biocpkg{ggbio} allows the plots to be saved as objects, which can later be arranged by specialist functions such as \Rfunction{tracks}. This function automatically aligns the x-axis of each plot to be on the same scale.
+
+\usecase
+Make a combined plot of the aligned reads and transcripts for the selected gene.
+
+<<>>=
+p1 <- autoplot(tx, which = myreg)
+p2 <- autoplot(bamSubset, stat = "coverage")
+tracks(p1, p2)
+@
+
+%%The combined plot can also be embellished by adding an Ideogram to show the location of the region being plotted in relation to the chromosome.
+
+%%\usecase
+%%Get the ideogram data for the drosophilla genome and add to the plot
+
+%%<<eval=FALSE>>=
+%%plotIdeogram(genome = "dm3")
+%%plotIdeogram(genome = "dm3", subchr = "chr4")
+%%start <- min(start(bamSubset))
+%%end <- max(end(bamSubset))
+%%id <- plotIdeogram(genome = "dm3", subchr = "chr4", zoom.region = c(start,end))
+%%tracks(id, p1, p2)
+%%@
+
+
+\end{document}
