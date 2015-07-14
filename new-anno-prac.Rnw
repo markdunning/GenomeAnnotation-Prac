@@ -64,7 +64,7 @@ datasets <- listDatasets(ensemblLatest)
 datasets[which(datasets[,1] == "hsapiens_gene_ensembl"),]
 @
 
-Unfortunately, our RNA-seq was aligned and annotated against \texit{hg19}. Different versions of biomaRt and genome version can have different attributes and different underlying annotation. Therefore, if we annotate using a conflicting version of Ensembl our results may be misleading.
+Unfortunately, our RNA-seq was aligned and annotated against \textit{hg19}. Different versions of biomaRt and genome version can have different attributes and different underlying annotation. Therefore, if we annotate using a conflicting version of Ensembl our results may be misleading.
 
 \usecase Connect to the human genome in the February 2014 archive of biomaRt. Verify that hg19 is being accessed.
 
@@ -260,11 +260,12 @@ length(exo22)
 
 
 \usecase
-Import the aligned reads for sample "SRR278173" using \Biocpkg{GenomicAlignments}. 
+Import the aligned reads for sample "SRR278173" using \Biocpkg{GenomicAlignments}. Restrict the query to just chromsome 22 reads.
 
 <<>>=
 library(GenomicAlignments)
-bam <- readGAlignments(file="Day3//SRR278173.bam", use.name = TRUE)
+bam <- readGAlignments(file="Day3//SRR278173.sorted.bam",
+                       param=ScanBamParam(which = GRanges("22",IRanges(1,51304566))),use.name=TRUE)
 @
 We are now in a position to begin overlapping reads with exons. You should have already seen the \Rfunction{findOverlaps} function that will report the amount of ovelap between two sets of ranges. We will start simple by just doing an overlap of a single gene to make sure that we understand the output
 
@@ -303,26 +304,13 @@ Obtain counts of chromosome 22 gene "4627" for the bam files provided.
 
 <<>>=
 fls <- paste0("Day3/",dir("Day3/",pattern=".bam"))
+fls <- fls[-grep("bai",fls)]
 names(fls) <- basename(fls)
 multiOlap <- summarizeOverlaps(exo22[["4627"]], BamFileList(fls))
 head(assays(multiOlap)$counts)
+
 @
 
-\subsection{Importing and annotating using custom tracks}
-Genome browser or other tracks are often distributed as files in the formats gff, bed, wig etc. The package \Biocpkg{rtracklayer} provides infrastrucutre to import files in these formats and create a \Rclass{GRanges} representation.
-
-\usecase
-Read the gff file supplied with the pasilla package and use these intervals to produce a table of overlaps.
-
-<<>>=
-library(rtracklayer)
-gffFile <- "Dmel.BDGP5.25.62.DEXSeq.chr.gff"
-gff <- paste(system.file("extdata", package = "pasilla"), gffFile,sep="/")
-read.table(gff, nrows = 10, sep = "\t") 
-gffRange <- import(gff)
-gffRange
-gffOverlap <- summarizeOverlaps(gffRange , bam) 
-@
 
 %5\usecase
 %5Find out what tracks are available for the dm3 genome. Download the RepeatMasker track.
@@ -345,23 +333,19 @@ gffOverlap <- summarizeOverlaps(gffRange , bam)
 It is also possible to save the results of a Bioconductor analysis in a browser to enable interactive analysis and integration with other data types, or sharing with collaborators. We shall use the bed format for illustration.
 
 \usecase
-Select all significant genes from the pasilla analysis (lets use a p-value of 0.1) and annotate their genome location. Create a \Rclass{GRanges} representation of the locations.
 
 <<>>=
-sigResults <- pasillaRes[which(pasillaRes$PValue< 0.1), ]
-
-myInfo <- getBM(attributes = c("flybase_gene_id", "chromosome_name",
-"band", "start_position", "end_position", "external_gene_name"),
-filters = "flybase_gene_id", values = rownames(sigResults), mart = ensembl) 
+geneRegions <- unlist(range(exo))
+@
 
 
-myInfo <- merge(sigResults, myInfo, by.x = 0, by.y = 1)
+\usecase
+Select all significant genes from the edgeR analysis (lets use a p-value of 0.05).
 
-
-sigRanges <- GRanges(paste("chr", myInfo$chromosome_name, sep = ""),
-IRanges(start = myInfo$start_position , end = myInfo$end_position ,
-names = myInfo[, 1]))
-
+<<>>=
+sigResults <- edgeRresults[which(edgeRresults$adj.P.Val< 0.05), ]
+head(sigResults)
+sigGeneRegions <- geneRegions[na.omit(match(sigResults[,1],names(geneRegions)))]
 @
 
 Rather than just representing the genomic locations, the .bed format is also able to colour each range according to some property of the analysis (e.g. direction and magnitude of change) to help highlight particular regions of interest. A score can also be displayed when a particular region is clicked-on. A useful propery of \Robject{GenomicRanges} is that we can attach metadata to each range using the \Rfunction{mcols} function. 
@@ -370,10 +354,14 @@ Rather than just representing the genomic locations, the .bed format is also abl
 Store the adjusted p-values and log fold-change in the ranges object
 
 <<>>=
+mcols(sigGeneRegions) <- sigResults[match(names(sigGeneRegions), sigResults[,1]),]
+@
 
-mcols(sigRanges)$padj = myInfo$PValue
-mcols(sigRanges)$logfc = myInfo$logFC
-sigRanges
+\usecase Tidy-up the GenomicRanges object so that only chromosomes 1 to 22 and sex chromosomes are included
+
+<<>>=
+seqlevels(sigGeneRegions)
+sigGeneRegions <- keepSeqlevels(sigGeneRegions, paste0("chr", c(1:22,"X","Y")))
 @
 
 
@@ -381,10 +369,10 @@ sigRanges
 Create a score from the p-values and colour scheme based on the fold-change. For convenience, restrict the fold changes to be within the region -3 to 3.
 
 <<>>=
-Score <- -log10(sigRanges$padj)
+Score <- -log10(sigGeneRegions$adj.P.Val)
 rbPal <-colorRampPalette(c("red", "blue"))
 
-logfc <-  pmax(sigRanges$logfc, -3) 
+logfc <-  pmax(sigGeneRegions$logFC, -3) 
 logfc <-  pmin(logfc , 3)
 
 Col <- rbPal(10)[as.numeric(cut(logfc, breaks = 10))]
@@ -398,16 +386,53 @@ The colours and score can be saved in the \Rclass{GRanges} object and \Rcode{sco
 Export the signifcant results from the DE analysis as a \textit{.bed} track. You can load the resulting file in IGV, if you wish.
 
 <<>>=
-mcols(sigRanges)$score <- Score
+mcols(sigGeneRegions)$score <- Score
 
-mcols(sigRanges)$itemRgb <- Col
-
-export(sigRanges , con = "topHits.bed")
+mcols(sigGeneRegions)$itemRgb <- Col
+library(rtracklayer)
+export(sigGeneRegions , con = "topHits.bed")
 @
 
-The export of other formats such as \textit{gff}, \textit{bedGraph}, \textit{wig} and \textit{bigwig} is also possible with \Biocpkg{rtracklayer}. We can also call the UCSC browser directly to display the tracks. See the \Biocpkg{rtracklayer} vignette for details.
+The export of other formats such as \textit{gff}, \textit{bedGraph}, \textit{wig} and \textit{bigwig} is also possible with \Biocpkg{rtracklayer}. 
 
 
+\subsection{Brief introduction to ggplot2}
+
+\CRANpkg{ggplot2} is a popular package that is capable of generating sophisticated graphics. The key concept is that a plot is generated by adding a series of \textit{layers} onto a dataset that define how the data are transformed and displayed. To construct a plot in ggplot2, we must have our data in a \textit{data frame} and be able to define the characteristics (\textit{aesthetics}) of the plot from the variables in the data frame.
+
+A \href{https://en.wikipedia.org/wiki/Volcano_plot_(statistics)}{{\color{blue}volcano plot}} is commonly used to identify changes in high-througput studies. The magnitude of change is shown on the x-axis and significance on the y-axis. In gene-expression studies, the significance measure is usually the \textit{log-odds} score (B).
+
+\usecase Make a volcano plot from the edgeR results. 
+
+<<>>=
+library(ggplot2)
+ggplot(edgeRresults, aes(x = logFC,y=B)) + geom_point()
+@
+\bioccomment{To construct the plot, we have to specify what variables are mapped to the aesthetics on the plot using the \Rfunction{aes} function. However, this is not enough to produce the plot. We also have to specify how the variables are arranged on the plot by picking an appropriate \textit{geom}. In this case we choose \Rfunction{geom\_point} for a scatter plot.}
+
+A real advantage of ggplot2 is that we are able to use the variables in the data frame to set other properties of the plot, such as the colour, size and plotting characters. ggplot2 will take care of the colouring and create an appropriate legend. 
+
+\usecase Create a new variable in the edgeR results data frame to indicate whether each gene is statistically significant or not. Use this new variable to colour the points on the volcano plot
+
+<<>>=
+edgeRresults$Significant <- edgeRresults$adj.P.Val < 0.05
+ggplot(edgeRresults, aes(x = logFC,y=B,col=Significant)) + geom_point()
+
+@
+
+A disadvantage of ggplot2 is that is not immediately obvious how to change the appearance of the plot once it has been created; especially if one is familiar with base graphics. An example of how to change the default colours that ggplot2 assigns is shown below.
+
+\usecase Make an MA-plot of the edgeR results. Recall that this displays the average expression level on the x axis, and log fold-change on the y-axis. Modify the plot so that significant genes are shown in red. 
+
+<<>>=
+ggplot(edgeRresults, aes(x = AveExpr,y = logFC,col = Significant)) + geom_point()
+ggplot(edgeRresults, aes(x = AveExpr,y = logFC,col = Significant)) 
+        + geom_point(alpha=0.4) 
+        + scale_color_manual(values=c("black","red"))
+@
+
+
+More information on ggplot2 is covered in the \href{http://www.cookbook-r.com/Graphs/}{{\color{blue}R cookbook}} 
 
 \subsection{ggbio}
 We will now take a brief look at one of the visualisation packages in Bioconductor that takes advantages of the GenomicRanges and GenomicFeatures object-types.
@@ -415,43 +440,29 @@ The documentation for \Biocpkg{ggbio} is very extensive and contains lots of exa
 
 {\tt http://www.tengfei.name/ggbio/docs/}
 
-Extra background reading can be found on the ggplot2 website; the package on which the principles of ggbio is based.\newline
-{\tt http://ggplot2.org/}
-
 The \Biocpkg{Gviz} package is another Bioconductor package that specialising in genomic visualisations, but we will not explore this package in the course.
 
 
-A useful function within \Biocpkg{ggbio} is \Rfunction{autoplot}, which will construct an appropriate plot based on the object-type of the input. For example, if we pass a GRanges object to the function it will plot the genomic locations on a linear scale and label chromosome and positional information on the plot. The style of the plot can be changed by the layout argument.
 
-\usecase
-Plot the locations of the significant hits from the DE analysis. Try the default, karyogram and circle layouts
 
-<<>>=
-library(ggbio)
-autoplot(sigRanges)
-autoplot(sigRanges[seqnames(sigRanges) == "chrX"])
-autoplot(sigRanges , layout = "karyogram")
-
-@
 The \textit{Manhattan} plot is a common way of visualising genome-wide results, and this is implemented as the \Rfunction{plotGrandLinear} function. We have to supply a value to display on the y-axis. This is done by using the \Rfunction{aes} function, which is inherited from \Rpackage{ggplot2}.
 
 \usecase
 Plot the genomic locations of the significant genes on a linear scale. Modify the colour scheme to show whether each gene is up- or down-regulated
 
 <<>>=
-plotGrandLinear(sigRanges , aes(y = score)) 
-mcols(sigRanges)$Up <- logfc > 0 
-plotGrandLinear(sigRanges, aes(y = score, col = Up))
+plotGrandLinear(sigGeneRegions , aes(y = logFC)) 
+mcols(sigGeneRegions)$Up <- logfc > 0 
+plotGrandLinear(sigGeneRegions, aes(y = logFC, col = Up))
 @
 
-\Biocpkg{ggbio} is also able to plot the structure of genes according to a particular model represented by a \Robject{GenomicFeatures} object.
+A useful function within \Biocpkg{ggbio} is \Rfunction{autoplot}, which will construct an appropriate plot based on the object-type of the input. For example, \Biocpkg{ggbio} is able to plot the structure of genes according to a particular model represented by a \Robject{GenomicFeatures} object.
 
-\usecase
-Find the gene which has the most exon counts in the pasilla bam. Plot the struture of this gene.
+\usecase Plot the gene structure of the gene "4627"
 
 <<>>=
-myGene <- names(exonRanges)[which.max(countExons)]
-autoplot(tx, which = exo4[[myGene]])
+myGene <- "4627"
+autoplot(tx, which = renameSeqlevels(exo22[[myGene]],value=c("22"="chr22")))
 @
 
 We can even plot the location of sequencing reads if they have been imported using \Rfunction{readGAlignments} function (or similar).
@@ -460,7 +471,7 @@ We can even plot the location of sequencing reads if they have been imported usi
 Plot the number of reads in this region surrounding the gene.
 
 <<>>=
-myreg <- flank(reduce(exo4[[myGene]]), 500, both = T)
+myreg <- flank(reduce(exo22[[myGene]]), 500, both = T)
 bamSubset <- bam[bam %over% myreg]
 autoplot(bamSubset)
 @
@@ -472,16 +483,46 @@ Repeat the plot, but with a smoothed coverage
 autoplot(bamSubset , stat = "coverage")
 @
 
-The plots produced by \Biocpkg{ggbio} (and indeed \Rpackage{ggplot2} on which the package is based) are not in standard R graphics format, so techniques like \Rcode{par(mfrow)} for arranging plots on the same page are not applicable. However, \Biocpkg{ggbio} allows the plots to be saved as objects, which can later be arranged by specialist functions such as \Rfunction{tracks}. This function automatically aligns the x-axis of each plot to be on the same scale.
 
-\usecase
-Make a combined plot of the aligned reads and transcripts for the selected gene.
+\usecase Make an ideogram for Human chromosome 22
 
 <<>>=
-p1 <- autoplot(tx, which = myreg)
-p2 <- autoplot(bamSubset, stat = "coverage")
-tracks(p1, p2)
+idPlot <- plotIdeogram(genome = "hg19",subchr = "chr22")
+idPlot
 @
+
+
+The plots produced by \Biocpkg{ggbio} (and indeed \Rpackage{ggplot2} on which the package is based) are not in standard R graphics format, so techniques like \Rcode{par(mfrow)} for arranging plots on the same page are not applicable. However, \Biocpkg{ggbio} allows the plots to be saved as objects, which can later be arranged by specialist functions such as \Rfunction{tracks}. This function automatically aligns the x-axis of each plot to be on the same scale.
+
+
+
+\usecase
+Make a combined plot of the aligned reads and transcripts for the selected gene. Also show the ideogram for chromosome 22
+
+
+<<>>=
+geneMod <- autoplot(tx, which = renameSeqlevels(myreg,value=c("22"="chr22")))
+reads1 <- autoplot(bamSubset, stat = "coverage")
+tracks(idPlot,geneMod ,reads1)
+@
+
+
+
+<<>>=
+
+mytracks <- geneMod
+
+for(file in fls){
+  bam <- readGAlignments(file=file,
+                       param=ScanBamParam(which = GRanges("22",IRanges(1,51304566))),
+                       use.name=TRUE)
+  bamSubset <- bam[bam %over% myreg]
+  mytracks <- c(mytracks,autoplot(bamSubset, stat="coverage"))
+    
+}
+autoplot(mytracks)
+@
+
 
 %%The combined plot can also be embellished by adding an Ideogram to show the location of the region being plotted in relation to the chromosome.
 
