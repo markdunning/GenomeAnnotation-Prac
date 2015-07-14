@@ -81,7 +81,7 @@ The function \Rfunction{getBM} is used to build-up queries in biomart. We must s
 
 
 \subsection{Annotating the RNA-seq results}
-We can use \Biocpkg{biomaRt} to annotate the results of our RNA-seq analysis. Firstly, we have to recognise that the first column of the \Robject{topHits} data frame are Entrez IDs. Then it is a matter of deciding what attributes we want to retrieve from the database.
+We can use \Biocpkg{biomaRt} to annotate the results of our RNA-seq analysis. Firstly, we have to recognise that the first column of the \Robject{topHits} data frame are Entrez IDs. T
 
 \usecase What is the name of the filter for Entrez gene ID?
 
@@ -92,6 +92,7 @@ head(flt)
 flt[grep("entrez",flt[,1]),]
 @
 
+hen it is a matter of deciding what attributes we want to retrieve from the database.
 
 \usecase What are the attribure names for HGNC symbol, chromosome name and description?
 
@@ -118,7 +119,7 @@ head(extraInfo)
 
 You may notice that the results retrieved from biomaRt may not be in the same order as the RNA-seq results that we are trying to annotate. The \Rfunction{merge} function may be useful in making sure that the rows match-up. In addition to the two data frames we are trying to merge, we also need to have a common identifier in both data frames (in our case, the Entrez ID). The \Rcode{by.x} and \Rcode{by.y} arguments are used to specify the column that this identifier can be found in.
 
-\usecase Create a merged table containing both DESeq results and the annotations.
+\usecase Create a merged table containing both edgeR results and the annotations.
 
 <<>>=
 annotatedHits <- merge(topHits, extraInfo, by.x = 1, by.y = 1,sort=FALSE) 
@@ -131,6 +132,8 @@ head(annotatedHits)
 The resulting table, \Robject{annotatedHits}, can now be used to ease the interpretation of the RNA-seq analysis and can be shared with collaborators.
 
 \subsection{Retrieving Gene Sequences}
+ 
+In this section we will explore how to retrieve sequences for our most differentially-expressed genes. Such a set of sequences could be used to discover motifs, for example.
 
 \usecase Retrieve the chromosome names, start and end positions and strand for the top hits. Restrict the data to just chromsomes 1 to 22 and the sex chromosomes. 
 
@@ -146,11 +149,11 @@ posInfo <- posInfo[posInfo[,2] %in% c(1:22,"X","Y"),]
 
 @
 
-You should be aware that plenty of functionality exists to manipulate and analyse intervals in the form of \Robject{GRanges} objects. You'll see that the chromosome names from biomaRt and numerical values, whereas other packages in Bioconductor expect chromosome names with the \textit{chr} prefix. Also, the strand is not given in a standard format and we need to convert these into '+' or '-' characters.
+You should be aware that plenty of functionality exists to manipulate and analyse intervals in the form of \Robject{GRanges} objects. You'll see that the chromosome names from biomaRt are numerical values, whereas other packages in Bioconductor expect chromosome names with the \textit{chr} prefix. Also, the strand is not given in a standard format and we need to convert these into '+' or '-' characters.
 
 \usecase Create a GenomicRanges representation of these gene coordinates
 
-\bioccomment{The \Rfunction{ifelse} function is a useful way of ....}
+\bioccomment{The \Rfunction{ifelse} function is a useful way of populating a vector based on a logical test. i.e. each value in the output vector is determined by the result of the logical test.}
 
 <<>>=
 library(GenomicRanges)
@@ -159,7 +162,7 @@ genePos <- GRanges(paste0("chr",posInfo[,2]),
                    IRanges(posInfo[,3],posInfo[,4],names=posInfo[,1]),strand)
 @
 
-\bioccomment{You may sometimes find the \Rfunction{with} function used in these situations. It allows the columns from a data frame to be accessed by name.}
+\bioccomment{You may sometimes find the \Rfunction{with} function used in these situations. It allows the columns from a data frame to be accessed by name. The result should be the same.}
 
 <<>>=
 genePos <- with(posInfo, GRanges(paste0("chr",chromosome_name), 
@@ -177,7 +180,7 @@ myseqs
 translate(myseqs)
 @
 
-
+The GRanges object that we created can be manipulated using the functionality from the \Biocpkg{IRanges} package. For instance we can resize, extend, collapse in the intervals.
 
 \usecase Get the sequences 100 base-pairs upstream of each gene and write these to a Fasta file
 
@@ -208,17 +211,7 @@ keytypes(hs)
 
 The \Rfunction{select} function is used to make the query. We have to supply a set of valid keys and columns.
 
-\usecase
-Annotate your RNA-seq results using the organism package. Choose any columns that you feel might be interesting.
-
-<<>>=
-myInfo2 <- select(hs, keytype = "ENTREZID",
-      columns =c("ENTREZID","SYMBOL") ,keys=as.character(topHits[,1]))
-
-myInfo2
-@
-
-In the analysis of thedataset, we allocated reads to genes. However, in this section we will explore the ways of counting reads that align to other genomic regions of interest. In this case we will use \textit{exons} and have to re-visit the orginal aligned reads.
+In the analysis of the dataset, we allocated reads to genes. However, in this section we will explore the ways of counting reads that align to other genomic regions of interest. In this case we will use \textit{exons} and have to re-visit the orginal aligned reads.
 
 In order to keep the computational requirements for the analysis down file we will restrict the analysis of genes that occur on chromosome 22. We illustrate this using the \Biocannopkg{org.Hs.eg.db} organism package.
 
@@ -231,7 +224,7 @@ head(chr22Genes)
 chr22ID <- chr22Genes[, 2]
 @
 
-\warning{If you get the error message:\\ \Rcode{unused arguments (columns = "ENSEMBL", keytype = "CHR", keys = "4")} \\ when trying to run the \Rfunction{select}, it is because another R package has defined another function called \Rfunction{select} and over-written the function from \Rpackage{AnnotationDBI} that we intended to use. If this occurs the statement \\ \Rcode{select <- AnnotationDbi::select} \\ should allow you to run the line of code.}
+\warning{If you get the error message:\\ \Rcode{unused arguments (columns = "ENSEMBL", keytype = "CHR", keys = "22")} \\ when trying to run the \Rfunction{select}, it is because another R package has defined another function called \Rfunction{select} and over-written the function from \Rpackage{AnnotationDBI} that we intended to use. If this occurs the statement \\ \Rcode{select <- AnnotationDbi::select} \\ should allow you to run the line of code.}
 
 \subsection{Transcript packages}
 
@@ -242,7 +235,7 @@ As its name suggests, \Biocannopkg{TxDb.Hsapiens.UCSC.hg19.knownGene} was built 
 \bioccomment{transcripts and cds regions can be selected in a similar fashion. See the help pages of \Rfunction{intronsBy} and \Rfunction{cdsBy}}
 
 \usecase
-Get all the exons for all genes on chromosome 4
+Get all the exons for all genes on chromosome 22
 
 <<>>=
 library(TxDb.Hsapiens.UCSC.hg19.knownGene) 
@@ -287,16 +280,7 @@ gCounts <- assays(so)$counts
 dim(gCounts)
 head(gCounts)
 @
-The count vector has entries for each gene on chromosome 22. If we wanted counts for all exons, then we would have to supply a slightly different argument to the function, by collapsing the list structure of the exons object.
 
-\usecase
-Obtain per-exon counts for each gene
-<<>>=
-perExonRanges <- unlist(exo22)
-olapExon <- summarizeOverlaps(perExonRanges , bam)
-eCounts <- assays(olapExon)$counts
-eCounts
-@
 The \Rfunction{summarizeOverlaps} function can also take the location of one or more bam files as an argument. This means that the processing of reads and counting is handled in one step. However, we have to use the special \Rfunction{BamFileList} constructor when dealing with multiple files.
 
 \usecase
@@ -312,25 +296,13 @@ head(assays(multiOlap)$counts)
 @
 
 
-%5\usecase
-%5Find out what tracks are available for the dm3 genome. Download the RepeatMasker track.
-
-%%\warning{The \Rfunction{getTable} function below seems to take a long time to load. Please don't wait too long for it to finish}
-
-%%%<<>>=
-%%mySession <- browserSession()
-%%track.names <- trackNames(ucscTableQuery(mySession))
-%%repeats <- getTable(ucscTableQuery(mySession, track = "rmsk",
-%%table = "rmsk")) 
-%%head(repeats)
-%%@
 
 
 
 \section{Visualisation}
 
 \subsection{Exporting tracks}
-It is also possible to save the results of a Bioconductor analysis in a browser to enable interactive analysis and integration with other data types, or sharing with collaborators. We shall use the bed format for illustration.
+It is also possible to save the results of a Bioconductor analysis in a browser to enable interactive analysis and integration with other data types, or sharing with collaborators. We shall use the \textit{bed} format for illustration.
 
 \usecase
 
