@@ -216,7 +216,7 @@ In the analysis of the dataset, we allocated reads to genes. However, in this se
 In order to keep the computational requirements for the analysis down file we will restrict the analysis of genes that occur on chromosome 22. We illustrate this using the \Biocannopkg{org.Hs.eg.db} organism package.
 
 \usecase
-Use the appropriate organism package to retrieve the ensembl IDs of all genes located on Human chromosome 22.
+Use the appropriate organism package to retrieve the Entrez IDs of all genes located on Human chromosome 22.
 
 <<>>=
 chr22Genes <- select(hs, columns = "ENTREZID", keytype = "CHR", keys = "22") 
@@ -224,13 +224,13 @@ head(chr22Genes)
 chr22ID <- chr22Genes[, 2]
 @
 
-\warning{If you get the error message:\\ \Rcode{unused arguments (columns = "ENSEMBL", keytype = "CHR", keys = "22")} \\ when trying to run the \Rfunction{select}, it is because another R package has defined another function called \Rfunction{select} and over-written the function from \Rpackage{AnnotationDBI} that we intended to use. If this occurs the statement \\ \Rcode{select <- AnnotationDbi::select} \\ should allow you to run the line of code.}
+\warning{If you get the error message:\\ \Rcode{unused arguments (columns = "ENTREZID", keytype = "CHR", keys = "22")} \\ when trying to run the \Rfunction{select}, it is because another R package has defined another function called \Rfunction{select} and over-written the function from \Rpackage{AnnotationDBI} that we intended to use. If this occurs the statement \\ \Rcode{select <- AnnotationDbi::select} \\ should allow you to run the line of code.}
 
 \subsection{Transcript packages}
 
 Bioconductor provide a number of pre-built packages that have a database of all transcript information for a particular organism. The package we are going to use is \Biocannopkg{TxDb.Hsapiens.UCSC.hg19.knownGene}. A full list of available transcript packages is available on the Bioconductor \href{http://tinyurl.com/l7hsus5}{{\color{blue}website}}. Look for the packages that start with {\tt TxDb.}.
 
-As its name suggests, \Biocannopkg{TxDb.Hsapiens.UCSC.hg19.knownGene} was built from the UCSC tables for the hg19 genome and uses Ensembl genes as an identifier. Convenient functions exist that can return the gene structure as a \Rclass{GRanges} object. One such function is \Rfunction{exonsBy} which returns a list of \Robject{GRanges} objects, each item in the list pertaining to a particular gene. Thus, the output of \Rfunction{exonsBy} can be subset in the usual manner ({\tt '[[}').
+As its name suggests, \Biocannopkg{TxDb.Hsapiens.UCSC.hg19.knownGene} was built from the UCSC tables for the hg19 genome. Convenient functions exist that can return the gene structure as a \Rclass{GRanges} object. One such function is \Rfunction{exonsBy} which returns a list of \Robject{GRanges} objects, each item in the list pertaining to a particular gene. Thus, the output of \Rfunction{exonsBy} can be subset in the usual manner ({\tt '[[}').
 
 \bioccomment{transcripts and cds regions can be selected in a similar fashion. See the help pages of \Rfunction{intronsBy} and \Rfunction{cdsBy}}
 
