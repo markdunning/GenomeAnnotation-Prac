@@ -311,6 +311,7 @@ At the moment, we have a \Robject{GenomicFeatures} object that represents every 
 
 <<>>=
 geneRegions <- unlist(range(exo))
+
 @
 
 We can now select the names of the statistically significant genes from the edgeR output in the usual manner.
@@ -405,9 +406,8 @@ A disadvantage of \CRANpkg{ggplot2} is that is not immediately obvious how to ch
 
 <<>>=
 ggplot(edgeRresults, aes(x = AveExpr,y = logFC,col = Significant)) + geom_point()
-ggplot(edgeRresults, aes(x = AveExpr,y = logFC,col = Significant)) 
-        + geom_point(alpha=0.4) 
-        + scale_color_manual(values=c("black","red"))
+ggplot(edgeRresults, aes(x = AveExpr,y = logFC,col = Significant)) + geom_point(alpha=0.4) + 
+  scale_color_manual(values=c("black","red"))
 @
 
 
@@ -478,8 +478,11 @@ Make a combined plot of the aligned reads and transcripts for the selected gene.
 
 
 <<>>=
+fls <- paste0("Day3/",dir("Day3/",pattern=".bam"))
+fls <- fls[-grep("bai",fls)]
+names(fls) <- basename(fls)
 geneMod <- autoplot(tx, which = myreg)
-reads1 <- autoplot(bamSubset, stat = "coverage") + labs(title=basename(fls[1]))
+reads1 <- autoplot(bamSubset, stat = "coverage") 
 tracks(idPlot,geneMod ,reads1)
 @
 
@@ -495,7 +498,7 @@ for(i in 1:length(fls)){
                        param=ScanBamParam(which = GRanges("chr22",IRanges(1,51304566))),
                        use.name=TRUE)
   bamSubset <- bam[bam %over% myreg]
-  mytracks[[i]] <-autoplot(bamSubset, stat="coverage") + ylim(0,70) + labs(title=fls[i])
+  mytracks[[i]] <-autoplot(bamSubset, stat="coverage") + ylim(0,70) 
     
 }
 tracks(idPlot,mytracks[[1]], mytracks[[2]],
