@@ -382,11 +382,19 @@ The export of other formats such as \textit{gff}, \textit{bedGraph}, \textit{wig
 
 A \href{https://en.wikipedia.org/wiki/Volcano_plot_(statistics)}{{\color{blue}volcano plot}} is commonly used to identify changes in high-throughput studies. The magnitude of change is shown on the x-axis and significance on the y-axis. In gene-expression studies, the significance measure is usually the \textit{log-odds} score (commonly-denoted as 'B' in limma and related projects).
 
+<<>>=
+load("Day3/edgeRAnalysis_ALLGENES.RData")
+head(y)
+y$significance <- -10*log10(y$FDR)
+edgeRresults <- y
+@
+
+
 \usecase Make a volcano plot from the edgeR results. 
 
 <<>>=
 library(ggplot2)
-ggplot(edgeRresults, aes(x = logFC,y=B)) + geom_point()
+ggplot(edgeRresults, aes(x = logFC,y=significance)) + geom_point()
 @
 \bioccomment{To construct the plot, we have to specify what variables are mapped to the aesthetics on the plot using the \Rfunction{aes} function. However, this is not enough to produce the plot. We also have to specify how the variables are arranged on the plot by picking an appropriate \textit{geom}. In this case we choose \Rfunction{geom\_point} for a scatter plot.}
 
@@ -395,8 +403,8 @@ A real advantage of \CRANpkg{ggplot2} is that we are able to use the variables i
 \usecase Create a new variable in the edgeR results data frame to indicate whether each gene is statistically significant or not. Use this new variable to colour the points on the volcano plot
 
 <<>>=
-edgeRresults$Significant <- edgeRresults$adj.P.Val < 0.05
-ggplot(edgeRresults, aes(x = logFC,y=B,col=Significant)) + geom_point()
+edgeRresults$DE <- edgeRresults$FDR < 0.01
+ggplot(edgeRresults, aes(x = logFC,y=significance,col=DE)) + geom_point()
 
 @
 
@@ -405,8 +413,8 @@ A disadvantage of \CRANpkg{ggplot2} is that is not immediately obvious how to ch
 \usecase Make an MA-plot of the edgeR results. Recall that this displays the average expression level on the x axis, and log fold-change on the y-axis. Modify the plot so that significant genes are shown in red. 
 
 <<>>=
-ggplot(edgeRresults, aes(x = AveExpr,y = logFC,col = Significant)) + geom_point()
-ggplot(edgeRresults, aes(x = AveExpr,y = logFC,col = Significant)) + geom_point(alpha=0.4) + 
+ggplot(edgeRresults, aes(x = logCPM,y = logFC,col = DE)) + geom_point()
+ggplot(edgeRresults, aes(x = logCPM,y = logFC,col = DE)) + geom_point(alpha=0.4) + 
   scale_color_manual(values=c("black","red"))
 @
 
