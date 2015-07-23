@@ -261,7 +261,7 @@ Import the aligned reads for sample "16N" using \Biocpkg{GenomicAlignments}. Res
 
 <<>>=
 library(GenomicAlignments)
-bam <- readGAlignments(file="Day3//16N_aligned.bam",
+bam <- readGAlignments(file="Day2/bam/16N_aligned.bam",
                        param=ScanBamParam(which = GRanges("chr22",IRanges(1,51304566))),
                        use.name=TRUE)
 @
@@ -518,7 +518,7 @@ In this case, it might be of interest to compare the coverage of several samples
 <<>>=
 mytracks <- alist() 
 
-fls <- paste0("Day3/",dir("Day3/",pattern=".bam"))
+fls <- paste0("Day2/bam/",dir("Day2/bam/",pattern=".bam"))
 fls <- fls[-grep("bai",fls)]
 names(fls) <- basename(fls)
 
