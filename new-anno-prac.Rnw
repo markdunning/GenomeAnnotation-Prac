@@ -45,9 +45,9 @@ Connect to the default version of Ensembl through BiomaRt. What vesrion of the h
 
 <<>>=
 library(biomaRt)
-listMarts()
+listMarts(host="www.ensembl.org")
 
-ensemblLatest <- useMart("ensembl")
+ensemblLatest <- useEnsembl(biomart="ensembl",dataset="hsapiens_gene_ensembl")
 
 datasets <- listDatasets(ensemblLatest)
 datasets[which(datasets[,1] == "hsapiens_gene_ensembl"),]
@@ -73,10 +73,10 @@ The function \Rfunction{getBM} is used to build-up queries in biomart. We must s
 Having now connected to a suitable database through \Biocpkg{biomaRt}, we will now proceed to use the online resources to annotate our RNA-seq results.
 
 \usecase
-Read the results of the edgeR analysis. If you have a set of results from the RNA-seq practical, feel free to use these. Otherwise, you can find a set of results in the Day3 course directory. Take just the top 100 results to make the queries run quicker
+Read the results of the edgeR analysis. If you have a set of results from the RNA-seq practical, feel free to use these. Otherwise, you can find a set of results in the Day2 course directory. Take just the top 100 results to make the queries run quicker
 
 <<>>=
-load("Day3//topHits_FWER_0.01.RData")
+load("Day2//topHits_FWER_0.01.RData")
 
 head(topHits)
 topHits <- topHits[1:100,]
@@ -306,7 +306,7 @@ We can now select the names of the statistically significant genes from the edge
 Select all significant genes from the edgeR analysis (lets use a p-value of 0.01), and then get the genomic intervals that correspond to these genes.
 
 <<>>=
-load("Day3//topHits_FWER_0.01.RData")
+load("Day2//topHits_FWER_0.01.RData")
 sigResults <- topHits
 head(sigResults)
 sigGeneRegions <- geneRegions[na.omit(match(sigResults[,1],names(geneRegions)))]
@@ -383,7 +383,7 @@ For these plots, we will load up the edgeR results for \textit{all} genes and us
 \usecase Load the complete table of edgeR results, and create another column to denote some measure of significance; with increasing values denoting increasing evidence for differential expression
 
 <<>>=
-load("Day3/edgeRAnalysis_ALLGENES.RData")
+load("Day2/edgeRAnalysis_ALLGENES.RData")
 head(y)
 y$significance <- -10*log10(y$FDR)
 edgeRresults <- y
