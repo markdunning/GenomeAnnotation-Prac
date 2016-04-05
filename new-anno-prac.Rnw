@@ -41,7 +41,7 @@ The \Biocpkg{biomaRt} package provides an interface to the \href{www.biomart.org
 \subsection{General BiomaRt Usage}
 
 \usecase
-Connect to the default version of Ensembl through BiomaRt. What vesrion of the human genome does it provide?
+Connect to the default version of Ensembl through BiomaRt. What version of the human genome does it provide?
 
 <<>>=
 library(biomaRt)
@@ -53,9 +53,9 @@ datasets <- listDatasets(ensemblLatest)
 datasets[which(datasets[,1] == "hsapiens_gene_ensembl"),]
 @
 
-Unfortunately, our RNA-seq was aligned and annotated against \textit{hg19}. Different versions of biomaRt and genome version can have different attributes and different underlying annotation. Therefore, if we annotate using a conflicting version of Ensembl our results may be misleading.
+Unfortunately, our RNA-seq was aligned and annotated against \textit{hg19} (a.k.a GRCh37). Different versions of biomaRt and genome version can have different attributes and different underlying annotation. Therefore, if we annotate using a conflicting version of Ensembl our results may be misleading.
 
-\usecase Connect to the human genome in the February 2014 archive of biomaRt. Verify that hg19 is being accessed.
+\usecase Connect to the human genome in the February 2014 archive of biomaRt. Verify that hg19 (/GRCh37) is being accessed.
 
 <<>>=
 ensembl_75 = useMart(biomart="ENSEMBL_MART_ENSEMBL", host="feb2014.archive.ensembl.org", 
@@ -76,11 +76,13 @@ Having now connected to a suitable database through \Biocpkg{biomaRt}, we will n
 Read the results of the edgeR analysis. If you have a set of results from the RNA-seq practical, feel free to use these. Otherwise, you can find a set of results in the Day2 course directory. Take just the top 100 results to make the queries run quicker
 
 <<>>=
-load("Day3//topHits_FWER_0.01.RData")
+load("Day2//topHits_FWER_0.01.RData")
 
 head(topHits)
 topHits <- topHits[1:100,]
 @
+
+\bioccomment{Loading the object {\tt topHits\_FWER\_0.01.RData} creates an object called {\tt topHits} in your workspace.}
 
 The \Robject{topHits} data frame provides us with a list of genes that are found to be \textit{statistically significant}. However, it is a separate investigation to determine if the genes are \textit{Biologically significant}. 
 
@@ -212,10 +214,25 @@ columns(hs)
 keytypes(hs)
 @
 
+For completeness, we note how to add extra information to our top hits using the pre-built organism packages rather than biomaRt. The \Rfunction{select} function is used to make a query to the organism database package. We have to supply a set of valid keys and columns, in a similar manner to how we used \Biocpkg{biomaRt}.
+
+\usecase Repeat the annotation steps from Section 1.2 using the \Biocannopkg{org.Hs.eg.db} organism package rather than biomaRt
+
+<<>>=
+
+extraInfoFromOrg <- select(org.Hs.eg.db, keys = topHits[,1], 
+                           keytype = "ENTREZID",columns = c("SYMBOL","GENENAME"))
+head(extraInfoFromOrg)
+
+extraInfoFromOrg <- extraInfoFromOrg[order(extraInfoFromOrg[,1]),]
+head(extraInfoFromOrg)
+@
+
+\bioccomment{If you want to table in the same order as the biomaRt results, you need to re-order according to the first column}
 
 In the analysis of this RNA-seq dataset, we allocated reads to genes. However, in this section we will explore the ways of counting reads that align to other genomic regions of interest. In this case we will use \textit{exons} and have to re-visit the orginal aligned reads.
 
-In order to keep the computational requirements for the analysis down file we will restrict the analysis of genes that occur on chromosome 22. We therefore need a list of the IDs of all such genes. We can do this using the \Biocannopkg{org.Hs.eg.db} organism package. The \Rfunction{select} function is used to make a query to the organism database package. We have to supply a set of valid keys and columns, in a similar manner to how we used \Biocpkg{biomaRt}.
+In order to keep the computational requirements for the analysis down file we will restrict the analysis of genes that occur on chromosome 22. We therefore need a list of the IDs of all such genes. We can do this using the \Biocannopkg{org.Hs.eg.db} organism package. 
 
 \usecase
 Use the appropriate organism package to retrieve the Entrez IDs of all genes located on Human chromosome 22.
@@ -225,6 +242,8 @@ chr22Genes <- select(hs, columns = "ENTREZID", keytype = "CHR", keys = "22")
 head(chr22Genes)
 chr22ID <- chr22Genes[, 2]
 @
+
+\bioccomment{You should see a warning message about location-based queries in the \Biocannopkg{org.Hs.eg.db} organism package being deprecated. This means such functionality will be disabled in future releases. In the following sections we will look at obtaining location information in a more-rigorous manner.}
 
 \warning{If you get the error message:\\ \Rcode{unused arguments (columns = "ENTREZID", keytype = "CHR", keys = "22")} \\ when trying to run the \Rfunction{select}, it is because another R package has defined another function called \Rfunction{select} and over-written the function from \Rpackage{AnnotationDBI} that we intended to use. If this occurs the statement \\ \Rcode{select <- AnnotationDbi::select} \\ should allow you to run the line of code.}
 
@@ -267,9 +286,13 @@ bam <- readGAlignments(file="Day2/bam/16N_aligned.bam",
 @
 We are now in a position to begin overlapping reads with exons. You should have already seen the \Rfunction{findOverlaps} function that will report the amount of ovelap between two sets of ranges. We will start simple by just doing an overlap of a single gene to make sure that we understand the output
 
-\usecase
-Use the \Rfunction{countOverlaps} function to count the number of reads covering each exon of Entrez ID "4627".
+Before performing an overlap operation, it is worth checking that the {\tt seqLevels} of the bam file and ranges are compatible.
+
+\usecase Use the \Rfunction{countOverlaps} function to count the number of reads covering each exon of Entrez ID "4627".
 <<>>=
+seqlevelsStyle(bam)
+seqlevelsStyle(exo22)
+
 counts <- countOverlaps(exo22[["4627"]], bam)
 counts
 @
@@ -306,7 +329,7 @@ We can now select the names of the statistically significant genes from the edge
 Select all significant genes from the edgeR analysis (lets use a p-value of 0.01), and then get the genomic intervals that correspond to these genes.
 
 <<>>=
-load("Day3//topHits_FWER_0.01.RData")
+load("Day2//topHits_FWER_0.01.RData")
 sigResults <- topHits
 head(sigResults)
 sigGeneRegions <- geneRegions[na.omit(match(sigResults[,1],names(geneRegions)))]
@@ -383,7 +406,7 @@ For these plots, we will load up the edgeR results for \textit{all} genes and us
 \usecase Load the complete table of edgeR results, and create another column to denote some measure of significance; with increasing values denoting increasing evidence for differential expression
 
 <<>>=
-load("Day3/edgeRAnalysis_ALLGENES.RData")
+load("Day2/edgeRAnalysis_ALLGENES.RData")
 head(y)
 y$significance <- -10*log10(y$FDR)
 edgeRresults <- y
