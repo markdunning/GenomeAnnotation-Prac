@@ -31,6 +31,7 @@ BiocStyle::latex()
 
 
 
+
 \maketitle
 \tableofcontents
 
@@ -323,6 +324,8 @@ geneRegions <- unlist(range(exo))
 
 @
 
+\bioccomment{Here the \Rfunction{unlist} function collapses the object into a single range interval for each gene}
+
 We can now select the names of the statistically significant genes from the edgeR output in the usual manner.
 
 \usecase
@@ -337,21 +340,13 @@ sigGeneRegions <- geneRegions[na.omit(match(sigResults[,1],names(geneRegions)))]
 
 \bioccomment{For some reason, some of the genes reported in the edgeR output do not have associated genomic features. Hence we have to discard such genes from the output by using \Rfunction{na.omit}}
 
-Rather than just representing the genomic locations, the .bed format is also able to colour each range according to some property of the analysis (e.g. direction and magnitude of change) to help highlight particular regions of interest. A \textit{score} can also be displayed when a particular region is clicked-on. A useful propery of \Robject{GenomicRanges} is that we can attach metadata to each range using the \Rfunction{mcols} function. The metadata can be supplied in the form of a data frame.
+Rather than just representing the genomic locations, the .bed format is also able to colour each range according to some property of the analysis (e.g. direction and magnitude of change) to help highlight particular regions of interest. A \textit{score} can also be displayed when a particular region is clicked-on. A useful propery of \Robject{GenomicRanges} is that we can attach metadata to each range using the \Rfunction{mcols} function. The metadata can be supplied in the form of a data frame.The \Biocpkg{rtracklayer} function can be used to import and export browsers tracks and can make use of these data when creating a bed file for visualisation.
 
 \usecase
-Store the adjusted p-values and log fold-change in the ranges object
+Store the adjusted p-values and log fold-change in the metadata of the ranges object for the significant genes
 
 <<>>=
 mcols(sigGeneRegions) <- sigResults[match(names(sigGeneRegions), sigResults[,1]),]
-@
-
-\usecase Use the human organism package to add gene symbols to this object
-
-<<>>=
-anno <- select(org.Hs.eg.db,keys = sigGeneRegions$genes,
-               keytype="ENTREZID",columns="SYMBOL")
-mcols(sigGeneRegions)$Symbol <- anno[,2]
 @
 
 
@@ -364,33 +359,31 @@ sigGeneRegions <- keepSeqlevels(sigGeneRegions, paste0("chr", c(1:22,"X","Y")))
 
 \bioccomment{Here, \Rfunction{keepSeqLevels} is used as a convenience to retain only the chromosomes that we are interested in}
 
-\usecase
-Create a score from the p-values that will displayed under each region, and colour scheme for the regions based on the fold-change. For convenience, restrict the fold changes to be within the region -3 to 3.
 
+We can create a colour scheme from the fold-change values. i.e. so that large positive differences are dark blue, and large negative changes are dark red (or vice-versa)
+
+\usecase 
+Create a vector where the entries are either red or blue depending on whether each fold change is negative or positive
 <<>>=
-Score <- -log10(sigGeneRegions$FWER)
-rbPal <-colorRampPalette(c("red", "blue"))
-
-logfc <-  pmax(sigGeneRegions$logFC, -3) 
-logfc <-  pmin(logfc , 3)
-
-Col <- rbPal(10)[as.numeric(cut(logfc, breaks = 10))]
+logfc <- sigGeneRegions$logFC
+Col <- ifelse(logfc < 0, "darkred","darkblue")
 @
 
 
-
-The colours and score can be saved in the \Rclass{GRanges} object and \Rcode{score} and \Rcode{itemRgb} columns respectively and will be used to construct the track when exporting. The \Biocpkg{rtracklayer} function can be used to import and export browsers tracks.
+The colours and score can be saved in the \Rclass{GRanges} object in \Rcode{score} and \Rcode{itemRgb} columns respectively and will be used to construct the track when exporting. 
 
 \usecase
 Export the signifcant results from the DE analysis as a \textit{.bed} track using \Biocpkg{rtracklayer}. You can load the resulting file in IGV, if you wish.
 
 <<>>=
-mcols(sigGeneRegions)$score <- Score
-
+mcols(sigGeneRegions)$score <- logfc
 mcols(sigGeneRegions)$itemRgb <- Col
+mcols(sigGeneRegions)$name <- paste0("GeneID:",names(sigGeneRegions))
 library(rtracklayer)
 export(sigGeneRegions , con = "topHits.bed")
 @
+
+\bioccomment{In IGV, you could navigate to {\tt chr18:52258390-52266724} (the top hit in the analysis) to verify that the data are displayed correctly.}
 
 The export of other formats such as \textit{gff}, \textit{bedGraph}, \textit{wig} and \textit{bigwig} is also possible with \Biocpkg{rtracklayer}. We do not need to explicitly tell the function what format to export the data in, it automatically detects this from the file name.
 
